@@ -1,0 +1,117 @@
+---
+title: "DESCP VIS¨"
+author: "LAURA PAABY"
+date: "2023-05-07"
+output: html_document
+---
+
+```{r}
+pacman::p_load(tidyverse, readxl, ggplot2, lme4)
+
+long_dat <- read_csv("data/merged_long_data.csv")
+head(long_dat)
+
+
+```
+### variable overview
+hej 
+```{r}
+long_dat %>% 
+  group_by(Day, Absense_Score) %>% 
+  summarise("Count" = n())
+
+long_dat %>% 
+  group_by(Absense_Score) %>% 
+  summarise("Count" = n())
+
+long_dat %>% 
+  ggplot(aes(x = Day)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ Absense_Score) +
+  labs(x = "Day", 
+       y = "Frequency of Observations",
+       title= "Absense Score") +
+  scale_fill_brewer(palette = "Blues") +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5, size = 1.8) +
+  theme_bw()
+
+```
+
+```{r}
+long_dat %>% 
+  group_by(Day, sat_Score) %>% 
+  summarise("Count" = n())
+
+long_dat %>% 
+  group_by(sat_Score) %>% 
+  summarise("Count" = n())
+
+long_dat %>% 
+  ggplot(aes(x = Day)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ sat_Score) +
+  labs(x = "Day", 
+       y = "Frequency of Observations",
+       title= "Satisfaction Score") +
+  scale_fill_brewer(palette = "Blues") +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5, size = 1.8) +
+  theme_bw()
+```
+
+
+#### OF THE DUMMY CODE:
+```{r}
+long_dat %>% 
+  ggplot(aes(x = Day)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ sickness) +
+  labs(x = "Day", 
+       y = "Frequency of Observations",
+       title= "Sickness") +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw()
+
+long_dat %>% 
+  mutate(sick = as.factor(sickness)) %>% 
+  ggplot(aes(x = sick)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ Day) +
+  labs(x = "sickness", 
+       y = "Frequency of Observations",
+       title= "Sickness by Days") +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5, size = 1.8) +
+  theme_bw()
+```
+
+```{r}
+long_dat %>% 
+  ggplot(aes(x = Day)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ absent_oth_reason) +
+  labs(x = "Day", 
+       y = "Frequency of Observations",
+       title= "Absent for other reasons") +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw()
+```
+
+```{r}
+colnames(long_dat)
+```
+
+
+# Correlations 
+there are too many NAs for me to test correlation right now, but if I remove NAs there is almost no data left... 
+```{r}
+dat <- long_dat %>% 
+  select(!SurveyID, !eval_comment)
+
+res <- cor(dat)
+
+install.packages("Hmisc")
+library("Hmisc")
+res2 <- rcorr(as.matrix(dat))
+res2
+```
+
+

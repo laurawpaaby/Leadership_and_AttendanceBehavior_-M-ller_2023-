@@ -1,0 +1,203 @@
+---
+title: "timelag models"
+author: "LAURA PAABY"
+date: "2023-08-15"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, readxl, lme4)
+
+big_df <- read.csv("/Users/laura/Desktop/work_bss/data/all_data_merged.csv")
+
+# List of column names to process
+columns_to_process <- c("Absense_Score", "present_Score", "ls1_Score", "ls2_Score", "ls3_Score", "wb_he_Score", "wb_hap_Score", "wb_so_Score")
+
+# Loop through each column and apply the condition
+for (col in columns_to_process) {
+  big_df[[paste0("fix_", col)]] <- ifelse(big_df[[col]] > 10, NA, big_df[[col]])
+}
+
+my_dat <- big_df %>% 
+  select(SurveyID, Day, fix_Absense_Score, fix_present_Score, age, gen, ten_1, fix_ls1_Score, fix_ls2_Score, fix_ls3_Score, fix_wb_he_Score, fix_wb_hap_Score, fix_wb_so_Score)
+
+```
+
+
+# Data prep
+
+
+## *one day delay* 
+#### absenteeism 
+Fix data to answer:
+  H2: Daily social support from leader is negatively related to followers’ daily absenteeism the following day.
+
+```{r}
+
+# making new columns 
+abs_delay_dat <- my_dat %>%
+  arrange(SurveyID, Day) %>%
+  group_by(SurveyID) %>%
+  mutate(next_day = lead(Day),
+         ABS_observation_next_day = lead(fix_Absense_Score),
+         days_in_between = lead(Day) - Day)
+
+```
+
+
+
+modellos:
+```{r}
+abs_mod <- lmer(ABS_observation_next_day ~ fix_ls1_score + fix_ls2_score + fix_ls3_score  + gen + age +  ten_1 + Day + days_in_between + (SurveyID + 1 | Day), data = abs_delay_dat)
+
+summary(abs_mod)
+```
+
+
+#### presenteeism 
+Fix data to answer:
+  H1: Daily social support from leader is negatively related to followers’ presenteeism the following day. 
+
+```{r}
+# making new columns 
+pres_delay_dat <- my_dat %>%
+  arrange(SurveyID, Day) %>%
+  group_by(SurveyID) %>%
+  mutate(next_day = lead(Day),
+         PRES_observation_next_day = lead(fix_present_Score),
+         days_in_between = lead(Day) - Day)
+
+```
+
+
+
+modellos:
+```{r}
+pres_day_mod <- glmer(as.factor(observation_next_day) ~ fix_ls1_score + fix_ls2_score + fix_ls3_score  + gen + age +  ten_1 + Day + days_in_between + (SurveyID + 1 | Day), data = pres_delay_dat, family = "binomial")
+
+summary(pres_day_mod)
+```
+  
+
+
+  
+## *one week delay* 
+Here we are interested in seeing if the previous weeks support and well-being is related to the current weeks absenteeism and presenteeism assessments. 
+
+
+```{r}
+# lets make the week variable
+my_dat$week <- ifelse(my_dat$Day %in% c(1:7), 1, ifelse(my_dat$Day %in% c(8:14), 2, ifelse(my_dat$Day %in% c(15:21), 3, ifelse(my_dat$Day %in% c(22:28), 4, NA))))
+
+```
+
+
+#### presenteeism 
+Now looking at *presenteeism*:
+```{r}
+pres_weekly <- my_dat %>% 
+  select(week, Day, SurveyID, fix_ls1_Score, fix_ls2_Score, fix_ls3_Score, fix_present_Score, fix_wb_hap_Score, fix_wb_he_Score, fix_wb_so_Score, gen, age, ten_1)
+
+pres_weekly$present_Score_dummy <- ifelse(pres_weekly$fix_present_Score == 1, 0, ifelse(pres_weekly$fix_present_Score == 2, 1, NA))
+```
+
+
+```{r}
+# Calculate the proportion of 1's and 0's for each subject
+summary_pres_data <- pres_weekly %>%
+  group_by(SurveyID, week) %>%
+  summarize(count_1 = sum(!is.na(present_Score_dummy) & present_Score_dummy == 1),
+          count_0 = sum(!is.na(present_Score_dummy) & present_Score_dummy == 0),
+          total_responses = sum(!is.na(present_Score_dummy))) %>%
+  mutate(prop_1 = count_1 / total_responses,
+         prop_0 = count_0 / total_responses) %>%
+  ungroup()
+
+summary_data
+
+
+#### merging it with original 
+merged_data_pres <- pres_weekly %>%
+  left_join(summary_pres_data, by = c("SurveyID", "week"))
+```
+
+
+```{r}
+# long format to plot: 
+pres_prob_logn <- summary_pres_data %>%
+  pivot_longer(cols = c(prop_1, prop_0), values_to = "prop") %>% 
+  rename(pres_score_prop = name) %>% 
+  filter(SurveyID %in% c(297,129,300))
+
+pres_prob_logn$prop_no <- ifelse(pres_prob_logn$pres_score_prop == "prop_1", 1, ifelse(pres_prob_logn$pres_score_prop == "prop_0",0, NA))
+
+pres_prob_logn %>% 
+  mutate(`Reported Presenteeism` = as.factor(prop_no)) %>% 
+  ggplot(aes(week, prop, fill = `Reported Presenteeism`)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_grid(~SurveyID) +
+  theme_bw() +
+  labs(x = "Week", y = "Proportions of Reported Presenteeism", title = "Three Subjects Proportional Weekly Reporting of Presenteeism")
+  
+```
+
+#### absenteeism  
+Now looking at *absenteeism*:
+
+```{r}
+abs_weekly <- my_dat %>% 
+  select(week,Day, SurveyID, fix_ls1_Score, fix_ls2_Score, fix_ls3_Score, fix_Absense_Score, fix_wb_hap_Score, fix_wb_he_Score, fix_wb_so_Score, gen, age, ten_1)
+
+```
+
+
+```{r}
+# Calculate the proportion of 1's and 0's for each subject
+summary_abs_data <- abs_weekly %>%
+  group_by(SurveyID, week) %>%
+  summarize(count_1 = sum(!is.na(fix_Absense_Score) & fix_Absense_Score == 1),
+          count_2 = sum(!is.na(fix_Absense_Score) & fix_Absense_Score == 2),
+          count_3 = sum(!is.na(fix_Absense_Score) & fix_Absense_Score == 3),
+          count_4 = sum(!is.na(fix_Absense_Score) & fix_Absense_Score == 4),
+          count_5 = sum(!is.na(fix_Absense_Score) & fix_Absense_Score == 5),
+          total_responses = sum(!is.na(fix_Absense_Score))) %>%
+  mutate(prop_1 = count_1 / total_responses,
+         prop_2 = count_2 / total_responses,
+         prop_3 = count_3 / total_responses,
+         prop_4 = count_4 / total_responses,
+         prop_5 = count_5 / total_responses) %>%
+  ungroup()
+
+merged_data_abs <- abs_weekly %>%
+  left_join(summary_abs_data, by = c("SurveyID", "week"))
+```
+
+
+```{r}
+# long format to plot: 
+abs_prob_logn <- summary_abs_data %>%
+  pivot_longer(cols = c(prop_1, prop_2, prop_3, prop_4, prop_5), values_to = "prop") %>% 
+  rename(abs_score_prop = name) %>% 
+  filter(SurveyID %in% c(297,129,300))
+
+abs_prob_logn$prop_no <- ifelse(abs_prob_logn$abs_score_prop == "prop_1", 1, ifelse(abs_prob_logn$abs_score_prop == "prop_2",2, ifelse(abs_prob_logn$abs_score_prop == "prop_3", 3, ifelse(abs_prob_logn$abs_score_prop == "prop_4", 4, ifelse(abs_prob_logn$abs_score_prop == "prop_5", 5, NA)))))
+
+abs_prob_logn %>% 
+  mutate(`Reported Absense Thoughts` = as.factor(prop_no)) %>% 
+  ggplot(aes(week, prop, fill = `Reported Absense Thoughts`)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_grid(~SurveyID) +
+  theme_bw() +
+  labs(x = "Week", y = "Proportions of Reported Absense Thoughts", title = "Three Subjects Proportional Weekly Reporting of Absense Thoughts")
+  
+```
+
+
+
+
+

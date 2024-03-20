@@ -1,0 +1,246 @@
+---
+title: "MODEL TESTS"
+author: "LAURA PAABY"
+date: "2023-05-08"
+output: html_document
+---
+
+```{r}
+pacman::p_load(tidyverse, readxl, ggplot2, lme4, psych, jtools, modelsummary)
+```
+
+
+
+# MODEL insight ;) 
+*(1|participant ID)* =random effect (gives an individual intercept for each person)
+      - doing this we model these individual differences by assuming different random *intercepts* for each subject. 
+      In the words of the handbook: (1|Subject) specifies that level-1 observations are grouped by the level-2 variable called subject.
+      
+*(1 + Time | ID)* corresponds to random intercept and the random slope - so it assumes that each individual have a their own slope at each point in time.  
+    
+
+*(1|day)* = random effect (gives an unique intercept for each Day)
+      - Make sense cause people's response could vary from Day to Day
+
+Adding random effects, just think *"what can affect the outcome variable?"*
+epsilon = error (represent the deviations from our predictions due to “random” factors that we cannot control experimentally.)
+
+**Levels:**
+three-level model if we consider the repeated assessments (level 1) as nested within days (level 2) which in turn are nested within subjects (level 3)
+
+
+
+der er pt. convergence probs ved de her models: (1 + Time | ID), prøv at fjerne NA 
+
+## ABS + SATISFACTION 
+```{r}
+df_abs_sat <- read_csv("/Users/laura/Desktop/work_bss/data/sat_abs_data.csv")
+
+df_abs_sat$Day <- as.factor(df_abs_sat$Day)
+df_abs_sat$SurveyID <- as.factor(df_abs_sat$SurveyID)
+
+df_abs_sat_no_na <- df_abs_sat %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_sat_score) == TRUE))
+
+df_abs_sat_no_na$Day <- as.numeric(df_abs_sat_no_na$Day)
+```
+
+
+##### models 
+https://rpsychologist.com/r-guide-longitudinal-lme-lmer
+```{r}
+### RANDOM INTERCEPT FOR SUBJECTS ONLY 
+mod1 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + (1|SurveyID), data = df_abs_sat_no_na) 
+
+### RANDOM INTERCEPT FOR SUBJECTS + DAY AS FIXED EFFECTS 
+mod1_1 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + Day + (1 |SurveyID), data = df_abs_sat_no_na) 
+
+### Random slope for day, no random intercept
+mod1_2 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + (0 + Day|SurveyID), data = df_abs_sat_no_na) 
+mod1_3 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = df_abs_sat_no_na) 
+mod1_4 <- lmer(fix_abs_score ~ fix_sat_score:Day + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = df_abs_sat_no_na) 
+
+### RANDOM INTERCEPT + RANDOM SLOPE
+mod2 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1+ (1+Day|SurveyID), data = df_abs_sat_no_na) 
+
+### RANDOM INTERCEPT + RANDOM SLOPE + DAY AS FIXED EFFECTS 
+mod2_1 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + Day + (1+Day|SurveyID), data = df_abs_sat_no_na) 
+
+
+### CONDITIONAL GROW MODEL => Satisfaction are conditioned by day 
+# With no random effect 
+mod3 <- lmer(fix_abs_score ~ fix_sat_score:Day + age + gen + ten_1 + (1|SurveyID), data = df_abs_sat_no_na) 
+# With random effect
+mod3_1 <- lmer(fix_abs_score ~ f:Day + age + gen + ten_1 + (1+Day|SurveyID), data = df_abs_sat_no_na) 
+
+
+### CONDITIONAL GROW MODEL, but dropping intercept-slope covariance
+# with day as fixed effect
+mod4 <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + Day + (Day||SurveyID), data = df_abs_sat_no_na) 
+# with day as conditional on sat 
+mod4_1 <- lmer(fix_abs_score ~ fix_sat_score:Day + age + gen + ten_1 + (Day||SurveyID), data = df_abs_sat_no_na) 
+
+# Level 2 fixed effects
+mod5 <- lmer(fix_abs_score ~ fix_sat_score:Day + Day + fix_sat_score + age + gen + ten_1 + (1|SurveyID), data = df_abs_sat_no_na) 
+mod5_1 <- lmer(fix_abs_score ~ fix_sat_score:Day + Day +fix_sat_score + age + gen + ten_1 + (1+Day|SurveyID), data = df_abs_sat_no_na)
+
+```
+
+
+```{r}
+### finding the best model:
+anova(mod1, mod1_2)
+```
+
+
+
+```{r}
+modelsummary(mod1, stars = TRUE)
+summ(mod1, exp = T) # use to get p values and pretty output 
+summary(mod1_2)
+```
+
+
+
+## LS + ABS
+```{r}
+ls_mod_dat <- read_csv("/Users/laura/Desktop/work_bss/data/ls_pres_abs_data.csv")
+head(ls_mod_dat)
+
+ls_mod_dat_no_na <- ls_mod_dat %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_ls1_score) == TRUE) | !(is.na(fix_ls2_score) == TRUE) | !(is.na(fix_ls3_score) == TRUE))
+
+ls_mod_dat_no_na$Day <- as.numeric(ls_mod_dat_no_na$Day)
+```
+
+
+#### correlation 
+```{r}
+# Selecting out the independent variables "X".
+cor_dat_ls <- ls_mod_dat_no_na %>% 
+  select(fix_ls1_score, fix_ls2_score, fix_ls3_score, age, ten_1)
+
+# using pairs.panel() to look at the data
+pairs.panels(cor_dat_ls, lm=T)
+###### runs correlation covariance test ==> lm = true means it runs a linear model 
+
+corr.test(cor_dat_ls$fix_ls1_score, cor_dat_ls$fix_ls2_score)
+```
+
+
+#### models 
+```{r}
+### RANDOM INTERCEPT FOR SUBJECT ONLY 
+ls_mod1 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + (1 |SurveyID), data = ls_mod_dat_no_na)
+# W day as fixed effect
+ls_mod1_1 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + Day + (1 |SurveyID), data = ls_mod_dat_no_na) 
+
+
+### RANDOM SLOPE AND INTERCEPT 
+ls_mod2 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + (1 + Day|SurveyID), data = ls_mod_dat_no_na)
+
+# + day as fixed 
+ls_mod2_2 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + Day + (1 + Day|SurveyID), data = ls_mod_dat_no_na)
+
+# + day as interaction (conditioning) 
+ls_mod2_3 <- lmer(fix_abs_score ~ fix_ls1_score:Day + fix_ls2_score:Day + fix_ls3_score:Day + fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + Day + (1 + Day|SurveyID), data = ls_mod_dat_no_na)
+
+
+### 0 Covariance and fixed 
+ls_mod3 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + Day + (Day||SurveyID), data = ls_mod_dat_no_na)
+# w interaction 
+ls_mod3_1 <- lmer(fix_abs_score ~ fix_ls1_score:Day + fix_ls2_score:Day + fix_ls3_score:Day + age + gen + ten_1 + fix_ls1_score + fix_ls2_score + fix_ls3_score + Day + (Day||SurveyID), data = ls_mod_dat_no_na)
+
+
+
+
+#### ONLY SLOPE !!!!
+### Random slope for day, no random intercept
+mod4_1 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + (0 + Day|SurveyID), data = ls_mod_dat_no_na) 
+mod4_2 <- lmer(fix_abs_score ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = ls_mod_dat_no_na) 
+
+mod4_3 <- lmer(fix_abs_score:Day ~ fix_ls1_score + fix_ls2_score + fix_ls3_score + fix_ls1_score:Day + fix_ls2_score:Day + fix_ls3_score:Day + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = ls_mod_dat_no_na) 
+```
+
+
+```{r}
+anova(ls_mod1, mod4_1)
+
+modelsummary(ls_mod1)
+summary(mod4_1)
+```
+
+
+
+```{r}
+summ(ls_mod3, exp = T)
+```
+
+
+#### ICC
+Example - `ls_mod4`:
+The ICC of 0.66 means that 66% of the variability in the outcome can be accounted for by the clustering structure of the data, in our case to between- subject differences.
+
+Therefore, by using multilevel models we can better model the variation in the outcome by allowing for individual differences, in comparison to a model that does not take into account the multilevel structure of the data.
+
+
+### averaged ls
+```{r}
+ls_mod_dat1 <- ls_mod_dat %>% 
+  group_by(Day, SurveyID, age, gen, ten_1, fix_abs_score) %>% 
+  summarise(mean_ls = mean(c(fix_ls1_score, fix_ls2_score, fix_ls3_score)))
+```
+
+
+```{r}
+mod1 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + (1|SurveyID), data = ls_mod_dat1) 
+
+### RANDOM INTERCEPT FOR SUBJECTS + DAY AS FIXED EFFECTS 
+mod1_1 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + Day + (1 |SurveyID), data = ls_mod_dat1) 
+
+### Random slope for day, no random intercept
+mod1_2 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + (0 + Day|SurveyID), data = ls_mod_dat1) 
+mod1_3 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = ls_mod_dat1) 
+mod1_4 <- lmer(fix_abs_score ~ mean_ls:Day + age + gen + ten_1 + Day + (0 + Day|SurveyID), data = ls_mod_dat1) 
+
+### RANDOM INTERCEPT + RANDOM SLOPE
+mod2 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1+ (1+Day|SurveyID), data = ls_mod_dat1) 
+
+### RANDOM INTERCEPT + RANDOM SLOPE + DAY AS FIXED EFFECTS 
+mod2_1 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + Day + (1+Day|SurveyID), data = ls_mod_dat1) 
+
+
+### CONDITIONAL GROW MODEL => Satisfaction are conditioned by day 
+# With no random effect 
+mod3 <- lmer(fix_abs_score ~ mean_ls:Day + age + gen + ten_1 + (1|SurveyID), data = ls_mod_dat1) 
+# With random effect
+mod3_1 <- lmer(fix_abs_score ~ mean_ls:Day + age + gen + ten_1 + (1+Day|SurveyID), data = ls_mod_dat1) 
+
+
+### CONDITIONAL GROW MODEL, but dropping intercept-slope covariance
+# with day as fixed effect
+mod4 <- lmer(fix_abs_score ~ mean_ls + age + gen + ten_1 + Day + (Day||SurveyID), data = ls_mod_dat1) 
+# with day as conditional on sat 
+mod4_1 <- lmer(fix_abs_score ~ mean_ls:Day + age + gen + ten_1 + (Day||SurveyID), data = ls_mod_dat1) 
+
+# Level 2 fixed effects
+mod5 <- lmer(fix_abs_score ~ mean_ls:Day + Day + mean_ls + age + gen + ten_1 + (1|SurveyID), data = ls_mod_dat1) 
+mod5_1 <- lmer(fix_abs_score ~ mean_ls:Day + Day +mean_ls + age + gen + ten_1 + (1+Day|SurveyID), data = ls_mod_dat1)
+```
+```{r}
+anova(mod1, mod1_2)
+
+modelsummary(mod1)
+summary(mod1)
+```
+
+
+# WB + ABS 
+Does wellbeing affect your reported absenteeism?
+
+
+
+https://rpubs.com/mhanauer/305316
+
+
+

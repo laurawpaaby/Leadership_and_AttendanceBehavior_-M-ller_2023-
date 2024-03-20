@@ -1,0 +1,565 @@
+---
+title: "HYPOTHESIS TESTING"
+author: "LAURA PAABY"
+date: "2023-06-14"
+output: html_document
+---
+https://www.learn-mlms.com/10-module-10.html
+
+Note: 
+I use the code `(1 + Days | Subject)` to specify a random intercept for each Subject, and a random slope of Days for each Subject. This allows both the intercept and the slope of days to vary across participants, which means that we account for the nested structure of the data. 
+
+This is a standard growth model scenario: the rate of development or growth over time differs within entities (in this case people). As such, we want the the random part of the model to be `(1 + Days | Subject)`, which means that intercepts and the effect of time (~Time) vary across people (Subject)
+
+```{r}
+pacman::p_load(tidyverse, readxl, ggplot2, lme4, psych, jtools, modelsummary, MCMCglmm, ordinal, boot, MuMIn)
+
+options("jtools-digits" = 3)
+```
+
+# Investigating Absenteeism, Leader Support and Well-being  
+```{r}
+ls_mod_dat <- read_csv("/Users/laura/Desktop/work_bss/data/ls_pres_abs_data.csv")
+ls_mod_dat$Day <- as.numeric(ls_mod_dat$Day)
+ls_mod_dat$abs_dummy <- ifelse(ls_mod_dat$Absense_Score == 97, 1, 0) 
+
+#ls_mod_dat$fix_ls1_score <- as.factor(ls_mod_dat$fix_ls1_score)
+#ls_mod_dat$fix_ls2_score <- as.factor(ls_mod_dat$fix_ls2_score)
+#ls_mod_dat$fix_ls3_score <- as.factor(ls_mod_dat$fix_ls3_score)
+
+#ls_mod_dat$fix_pres_score <- as.factor(ls_mod_dat$fix_pres_score)
+#ls_mod_dat$fix_sat_score <- as.factor(ls_mod_dat$fix_sat_score)
+#ls_mod_dat$fix_abs_score <- as.numeric(ls_mod_dat$fix_abs_score) # cause we can't model it otherwise
+
+
+##### WELL BEING:
+data_surv <- read_csv("/Users/laura/Desktop/work_bss/data/clean_survey_data.csv")
+df_wb <- data_surv %>% 
+  select(Day, SurveyID, sat_Score, Absense_Score, wb_hap_Score, wb_he_Score, wb_so_Score, present_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+df_hyp34 <- data_surv %>% 
+  select(Day, SurveyID, sat_Score, Absense_Score, wb_hap_Score, wb_he_Score, wb_so_Score, present_Score, ls1_Score, ls2_Score, ls3_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+# fix variables:
+df_wb$fix_wb_hap <- ifelse(df_wb$wb_hap_Score > 10, NA, df_wb$wb_hap_Score)
+df_wb$fix_wb_he <- ifelse(df_wb$wb_he_Score > 10, NA, df_wb$wb_he_Score)
+df_wb$fix_wb_so <- ifelse(df_wb$wb_so_Score > 10, NA, df_wb$wb_so_Score)
+
+df_wb$fix_sat_score <- ifelse(df_wb$sat_Score > 10, NA, df_wb$sat_Score)
+df_wb$fix_abs_score <- ifelse(df_wb$Absense_Score > 10, NA, df_wb$Absense_Score)
+df_wb$fix_pres_score <- ifelse(df_wb$present_Score > 10, NA, df_wb$present_Score )
+
+write_csv(df_wb, "/Users/laura/Desktop/work_bss/data/wb_data.csv")
+
+
+# if all is NA remove row 
+df_wb_no_na <- df_wb %>% 
+  filter(!(is.na(fix_wb_hap) == TRUE) | !(is.na(fix_wb_he) == TRUE) | !(is.na(fix_wb_so) == TRUE))
+```
+
+
+## Hypothesis 1: 
+*Daily social support from leader (index of 3 items) is negatively related to followers' daily presenteeism*
+```{r}
+dat <- ls_mod_dat %>% 
+  mutate(pres_dummy = ifelse(fix_pres_score == 1, 0, ifelse(fix_pres_score == 2, 1, NA))) %>% 
+  drop_na(pres_dummy)
+
+#dat$Day <- as.factor(dat$Day)
+
+mod_p_all <- glmer(as.factor(pres_dummy) ~ age + gen + ten_1 + fix_ls1_score + fix_ls2_score + fix_ls3_score +(1 + Day|SurveyID), family = binomial, data = dat)
+
+summary(mod_p_all)$coeff
+odds_ls1 <- summary(mod_p_all)$coeff[5,1]
+odds_ls2 <- summary(mod_p_all)$coeff[6,1]
+odds_ls3 <- summary(mod_p_all)$coeff[7,1]
+```
+
+```{r}
+inv.logit(odds_ls1)
+inv.logit(odds_ls2)
+inv.logit(odds_ls3)
+```
+
+
+
+Mean LS: 
+```{r}
+ls_means <- dat %>% 
+  group_by(Day, SurveyID,age,gen,ten_1, pres_dummy) %>% 
+  summarise(mean_ls = (sum(fix_ls1_score, fix_ls2_score, fix_ls3_score)/3), na.rm = TRUE)
+
+mod_p_mean <- glmer(pres_dummy ~ age + gen + ten_1 + Day + mean_ls + (1 + Day|SurveyID), family = binomial, data = ls_means)
+
+summary(mod_p_mean)
+inv.logit(0.823)
+```
+
+
+
+## Hypothesis H2a: 
+*Daily social support from leader (index of 3 items) is negatively related to followers' daily absenteeism (maybe too few cases)*
+
+To few cases. 
+
+
+
+
+
+## Hypothesis H2b:
+*Daily social support from leader (index of 3 items) is negatively related to followers' daily thoughts of absenteeism.*
+
+
+Models:
+```{r}
+#### INDIVIDUAL MODELS #### 
+mod_ls1 <- lmer(fix_abs_score ~ age + gen + ten_1 + Day + fix_ls1_score + (1 + Day|SurveyID), data = ls_mod_dat)
+mod_ls2 <- lmer(fix_abs_score ~ age + gen + ten_1 + Day + fix_ls2_score + (1 + Day|SurveyID), data = dat2)
+mod_ls3 <- lmer(fix_abs_score ~ age + gen + ten_1 + Day + fix_ls3_score + (1 + Day|SurveyID), data = dat3)
+
+summ(mod_ls3)
+```
+
+All in one: 
+```{r}
+mod_abs_all <- lmer(fix_abs_score ~ age + gen + ten_1 + Day + fix_ls1_score + fix_ls2_score + fix_ls3_score +(1 + Day|SurveyID), data = ls_mod_dat)
+
+summary(mod_abs_all)
+
+inv.logit(0.119)
+```
+
+Mean: 
+```{r}
+ls_means <- dat %>% 
+  group_by(Day, SurveyID,age,gen,ten_1, fix_abs_score) %>% 
+  summarise(mean_ls = (sum(fix_ls1_score, fix_ls2_score, fix_ls3_score)/3), na.rm = TRUE)
+
+mod_abs_mean <- lmer(fix_abs_score ~ age + gen + ten_1 + Day + mean_ls +(1 + Day|SurveyID), data = ls_means)
+
+summary(mod_abs_mean)
+r.squaredGLMM(mod_abs_mean)
+
+```
+
+
+
+## Hypothesis H3: 
+*Daily social support from leader (index of 3 items) is negatively related to presenteeism through daily well-being:* 
+H3a: psychological 
+H3b: physical 
+H3c: social
+
+```{r}
+df_hyp34$fix_wb_hap <- ifelse(df_hyp34$wb_hap_Score > 10, NA, df_hyp34$wb_hap_Score)
+df_hyp34$fix_wb_he <- ifelse(df_hyp34$wb_he_Score > 10, NA, df_hyp34$wb_he_Score)
+df_hyp34$fix_wb_so <- ifelse(df_hyp34$wb_so_Score > 10, NA, df_hyp34$wb_so_Score)
+
+df_hyp34$fix_sat_score <- ifelse(df_hyp34$sat_Score > 10, NA, df_hyp34$sat_Score)
+df_hyp34$fix_abs_score <- ifelse(df_hyp34$Absense_Score > 10, NA, df_hyp34$Absense_Score)
+df_hyp34$fix_pres_score <- ifelse(df_hyp34$present_Score > 10, NA, df_hyp34$present_Score )
+
+df_hyp34$fix_ls1 <- ifelse(df_hyp34$ls1_Score > 10, NA, df_hyp34$ls1_Score)
+df_hyp34$fix_ls2 <- ifelse(df_hyp34$ls2_Score > 10, NA, df_hyp34$ls2_Score)
+df_hyp34$fix_ls3 <- ifelse(df_hyp34$ls3_Score > 10, NA, df_hyp34$ls3_Score)
+
+df_hyp34 <- df_hyp34 %>% 
+  mutate(pres_dummy = ifelse(fix_pres_score == 1, 0, ifelse(fix_pres_score == 2, 1, NA))) %>% 
+  drop_na(pres_dummy)
+
+```
+
+```{r}
+d <- df_hyp34 %>% 
+  group_by(Day, SurveyID,pres_dummy, fix_sat_score, fix_abs_score) %>% 
+  summarise(mean_wb = (sum(fix_wb_hap, fix_wb_he, fix_wb_so)/3), 
+            mean_ls = (sum(fix_ls1, fix_ls2, fix_ls3)/3), 
+            na.rm = TRUE)
+  
+```
+
+
+```{r}
+library(reshape2)
+
+d$fid <- 1:nrow(d)
+
+stacked <- reshape2::melt(d, id.vars = c("fid", "SurveyID", "mean_ls", "mean_wb", "Day"),
+   measure.vars = c("pres_dummy", "mean_wb"), value.name = "z")
+
+stacked <- within(stacked, {
+  sy <- as.integer(variable == "pres_dummy")
+  sm <- as.integer(variable == "mean_wb")
+})
+
+## show all data for id 1
+stacked[stacked$SurveyID==1, ]
+```
+
+now model this: 
+```{r}
+## fit model
+mm <- lmer(z ~ 0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls +
+               (1 + Day | SurveyID) +
+              (0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls| SurveyID) + (0 + sm | fid), data = stacked)
+
+mm1 <- lmer(z ~ 0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls +
+               (1 + Day | SurveyID), data = stacked)
+## view summary and save summary object to 'smm'
+summ(mm1)
+```
+
+```{r}
+# FIXED EFFECTS: 
+fixef(mm)
+```
+ 
+
+```{r}
+# PRODUCT OF THE PATH a AND b (THE PATHS FROM INDEPENDENT TO MEDIATIOR TO DEPENDENT)
+ab <- prod(fixef(mm)[c("sm:mean_ls", "sy:mean_wb")])
+ab
+```
+
+```{r}
+### covariance between random effects 
+rcov <- VarCorr(mm)[["SurveyID"]]["sm:mean_ls", "sy:mean_wb"]
+
+rcov
+```
+
+```{r}
+# indirect effect of mediator: 
+ab + rcov + fixef(mm)["mean_ls:sy"]
+```
+
+
+## Hypothesis H4: 
+*Daily social support from leader (index of 3 items) is negatively related to daily absenteeism through daily well-being* 
+H4a: psychological 
+H4b: physical 
+H4c: social
+
+```{r}
+d$fid <- 1:nrow(d)
+
+stacked <- melt(d, id.vars = c("fid", "SurveyID", "mean_ls", "mean_wb", "Day"),
+   measure.vars = c("fix_abs_score", "mean_wb"), value.name = "z")
+stacked <- within(stacked, {
+  sy <- as.integer(variable == "fix_abs_score")
+  sm <- as.integer(variable == "mean_wb")
+})
+
+## show all data for id 1
+stacked[stacked$SurveyID==1, ]
+```
+
+now model this: 
+```{r}
+## fit model
+mm <- lmer(z ~ 0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls +
+               (1 + Day | SurveyID) +
+              (0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls| SurveyID) + (0 + sm | fid), data = stacked)
+
+mm1<- lmer(z ~ 0 + sm + sm:mean_ls + sy + sy:mean_wb + sy:mean_ls +
+               (1 + Day | SurveyID), data = stacked)
+## view summary and save summary object to 'smm'
+summ(mm1)
+```
+
+```{r}
+# FIXED EFFECTS: 
+fixef(mm)
+```
+ 
+
+```{r}
+# PRODUCT OF THE PATH a AND b (THE PATHS FROM INDEPENDENT TO MEDIATIOR TO DEPENDENT)
+ab <- prod(fixef(mm)[c("sm:mean_ls", "sy:mean_wb")])
+ab
+```
+
+```{r}
+### covariance between random effects 
+rcov <- VarCorr(mm)[["SurveyID"]]["sm:mean_ls", "sy:mean_wb"]
+
+rcov
+```
+
+```{r}
+# indirect effect of mediator: 
+ab + rcov + fixef(mm)["mean_ls:sy"]
+```
+
+
+
+
+
+
+
+
+# Investigating Absenteeism, Overall Satisfaction and Well-being  
+
+## Hypothesis 1: 
+*Daily overall satisfaction with leader is negatively related to followers' daily presenteeism*
+```{r}
+mod_ps <- glmer(as.factor(pres_dummy) ~ age + gen + ten_1 + fix_sat_score +(1 + Day|SurveyID), family = binomial, data = dat_sat)
+summary(mod_ps)
+
+mod_ps
+```
+
+
+## Hypothesis H2a: 
+*Daily overall satisfaction with leader is negatively related to followers' daily absenteeism (maybe too few cases)*
+
+
+## Hypothesis H2b:
+*Daily overall satisfaction with leader is negatively related to followers' daily thoughts of absenteeism.*
+
+Loading data:
+```{r}
+df_abs_sat_no_na <- ls_mod_dat %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_sat_score) == TRUE))
+
+df_abs_sat_no_na$Day <- as.numeric(df_abs_sat_no_na$Day)
+```
+
+
+```{r}
+### RANDOM INTERCEPT + RANDOM SLOPE
+model_sat_h2b <- lmer(fix_abs_score ~ fix_sat_score + age + gen + ten_1 + Day + (1+Day|SurveyID), data = df_abs_sat_no_na) 
+
+summary(model_sat_h2b)
+```
+
+
+
+## Hypothesis H3: 
+https://stats.oarc.ucla.edu/r/faq/how-can-i-perform-mediation-with-multilevel-data-method-2/
+
+
+*Daily overall satisfaction with leader is negatively related to presenteeism through daily well-being:* 
+H3a: psychological 
+H3b: physical 
+H3c: social
+
+For simplicity I go with a average well-being variable. 
+
+```{r}
+dat_wb <- df_wb %>% 
+  mutate(pres_dummy = ifelse(fix_pres_score == 1, 0, ifelse(fix_pres_score == 2, 1, NA))) %>% 
+  drop_na(pres_dummy)
+
+dat_wb <- dat_wb %>% 
+  group_by(Day, SurveyID,pres_dummy, fix_sat_score, fix_abs_score) %>% 
+  summarise(mean_wb = (sum(fix_wb_hap, fix_wb_he, fix_wb_so)/3), na.rm = TRUE)
+```
+ 
+ stacking the data of the combined model: 
+```{r}
+d <- dat_wb
+library(reshape2)
+
+d$fid <- 1:nrow(d)
+
+stacked <- melt(d, id.vars = c("fid", "SurveyID", "fix_sat_score", "mean_wb", "Day"),
+   measure.vars = c("pres_dummy", "mean_wb"), value.name = "z")
+stacked <- within(stacked, {
+  sy <- as.integer(variable == "pres_dummy")
+  sm <- as.integer(variable == "mean_wb")
+})
+
+## show all data for id 1
+stacked[stacked$SurveyID==1, ]
+```
+ 
+now model this: 
+```{r}
+## fit model
+mm <- lmer(z ~ 0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score +
+               (1 + Day | SurveyID) +
+              (0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score| SurveyID) + (0 + sm | fid), data = stacked)
+
+mm1 <- lmer(z ~ 0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score +
+               (1 + Day | SurveyID), data = stacked)
+summ(mm1)
+```
+
+
+```{r}
+# FIXED EFFECTS: 
+fixef(mm)
+```
+ 
+
+```{r}
+# PRODUCT OF THE PATH a AND b (THE PATHS FROM INDEPENDENT TO MEDIATIOR TO DEPENDENT)
+ab <- prod(fixef(mm)[c("sm:fix_sat_score", "sy:mean_wb")])
+ab
+```
+
+```{r}
+### covariance between random effects 
+rcov <- VarCorr(mm)[["SurveyID"]]["sm:fix_sat_score", "sy:mean_wb"]
+
+rcov
+```
+
+```{r}
+# indirect effect of mediator: 
+ab + rcov + fixef(mm)["fix_sat_score:sy"]
+```
+
+
+
+
+## Hypothesis H4: 
+*Daily overall satisfaction with leader is negatively related to daily absenteeism through daily well-being* 
+H4a: psychological 
+H4b: physical 
+H4c: social
+
+```{r}
+d <- dat_wb
+
+d$fid <- 1:nrow(d)
+
+stacked <- melt(d, id.vars = c("fid", "SurveyID", "fix_sat_score", "mean_wb", "Day"),
+   measure.vars = c("fix_abs_score", "mean_wb"), value.name = "z")
+
+stacked <- within(stacked, {
+  sy <- as.integer(variable == "fix_abs_score")
+  sm <- as.integer(variable == "mean_wb")
+})
+
+## show all data for id 1
+stacked[stacked$SurveyID==1, ]
+```
+
+now model this: 
+```{r}
+## fit model
+mm <- lmer(z ~ 0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score +
+               (1 + Day | SurveyID) +
+              (0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score| SurveyID) + (0 + sm | fid), data = stacked)
+
+mm1 <- lmer(z ~ 0 + sm + sm:fix_sat_score + sy + sy:mean_wb + sy:fix_sat_score +
+               (1 + Day | SurveyID), data = stacked)
+## view summary and save summary object to 'smm'
+summ(mm1)
+```
+
+
+```{r}
+# FIXED EFFECTS: 
+fixef(mm)
+```
+
+
+```{r}
+# PRODUCT OF THE PATH a AND b (THE PATHS FROM INDEPENDENT TO MEDIATIOR TO DEPENDENT)
+ab <- prod(fixef(mm)[c("sm:fix_sat_score", "sy:mean_wb")])
+ab
+```
+
+```{r}
+### covariance between random effects 
+rcov <- VarCorr(mm)[["SurveyID"]]["sm:fix_sat_score", "sy:mean_wb"]
+
+rcov
+```
+
+```{r}
+# indirect effect of mediator: 
+ab + rcov + fixef(mm)["fix_sat_score:sy"]
+```
+
+
+
+
+
+# CLMM for fun
+https://cran.r-project.org/web/packages/ordinal/ordinal.pdf 
+```{r}
+dat1 <- dat
+```
+
+```{r}
+
+dat1$fix_pres_score <- as.factor(dat1$fix_pres_score)
+dat1$fix_sat_score <- as.factor(dat1$fix_sat_score)
+dat1$fix_abs_score <- as.factor(dat1$fix_abs_score) # cause we can't model it otherwise
+#dat1$Day <- as.factor(dat1$Day)
+```
+
+```{r}
+fmm1 <- clmm(fix_abs_score ~ fix_sat_score + Day + age + gen + ten_1 +(1 + Day|SurveyID), data = dat1)
+summary(fmm1)
+```
+
+
+
+
+# S6 and leadership 
+```{r}
+s6_moddat <- read.csv("/Users/laura/Desktop/work_bss/data/ls_s6_data.csv")
+
+s6_moddat$fix_s6 <- ifelse(s6_moddat$s6_Score >= 50, NA, s6_moddat$s6_Score)
+
+
+#### leader var
+s6_ls_dat <- s6_moddat %>% 
+  select(SurveyID, Day, gen, ten_1, age, fix_s6, fix_ls1_score, fix_ls2_score, fix_ls3_score) %>%
+  drop_na(fix_s6)
+
+
+#### satisfaction
+s6_sat_dat <- s6_moddat %>% 
+  select(SurveyID, Day, gen, ten_1, age, fix_s6, fix_sat_score) %>% 
+ drop_na(fix_s6)
+
+
+```
+
+
+```{r}
+mod_s6_ls <- lmer(fix_s6 ~ age + gen + ten_1 + Day + fix_ls1_score + fix_ls2_score + fix_ls3_score +(1 + Day|SurveyID), data = s6_ls_dat)
+
+summary(mod_s6_ls)
+```
+
+
+
+```{r}
+mod_s6_sat <- lmer(fix_s6 ~ age + fix_sat_score + gen + ten_1 + Day  +(1 + Day|SurveyID), data = s6_sat_dat)
+
+summ(mod_s6_sat)
+```
+
+# Baseline Emotions
+```{r}
+em_dat <- read_csv("/Users/laura/Desktop/work_bss/data/emo_dat_all.csv")
+em_mean_dat <- read_csv("/Users/laura/Desktop/work_bss/data/emo_average_dat.csv")
+```
+
+
+```{r}
+mod_em_abs <- lmer(fix_abs_score ~ avr_insens + avr_sens + Day + age + gen + ten_1 + (1+Day|SurveyID), data = em_mean_dat)
+summ(mod_em_abs)
+```
+
+```{r}
+em_mean_dat$pres_dummy <- ifelse(em_mean_dat$fix_pres_Score == 2, 1, ifelse(em_mean_dat$fix_pres_Score == 1, 0, NA))
+
+mod_em_pre <- glmer(pres_dummy ~ avr_insens + avr_sens + Day + age + gen + ten_1 + (1+Day|SurveyID), family = "binomial", data = em_mean_dat)
+
+summary(mod_em_pre)
+```
+
+```{r}
+inv.logit(1.606)
+```
+

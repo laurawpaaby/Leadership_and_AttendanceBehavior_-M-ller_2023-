@@ -1,0 +1,732 @@
+---
+title: "Final Plots"
+author: "LAURA PAABY"
+date: "2023-06-14"
+output: 
+  html_document:
+  code_folding: hide
+---
+```{r}
+pacman::p_load(tidyverse, readxl, ggpubr)
+
+data_all <- read_csv("/Users/laura/Desktop/work_bss/data/all_data_merged.csv")
+data_surv <- read_csv("/Users/laura/Desktop/work_bss/data/clean_survey_data.csv")
+```
+
+
+# Evolution of Absenteeism 
+### data prep:
+```{r}
+mod_abs <- data_surv %>% 
+  select(Day, SurveyID, Absense_Score, event_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+#### fix so no 99,97 etc
+mod_abs$fix_abs_score <- ifelse(mod_abs$Absense_Score > 10, NA, mod_abs$Absense_Score)
+
+df_abs_no_na <- mod_abs %>% 
+  drop_na(c("fix_abs_score"))
+
+```
+
+### plot:
+```{r, warning = FALSE}
+# plot
+ggplot(mod_abs, aes(Day, fix_abs_score)) + 
+  geom_line(alpha = 0.3) + # add individual line with transparency
+  stat_summary( # add average line
+    aes(group = 1),
+    fun = mean,
+    geom = "line",
+    color = "navy", 
+    size = 1.5
+  ) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Reported Absenteeism", title = "Evolution of Absenteeism", subtitle = "With Averaged Trajectory across All Subjects, N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(mod_abs$Day), breaks = mod_abs$Day)
+
+
+ggplot(df_abs_no_na, aes(Day, fix_abs_score, group = SurveyID)) + 
+  geom_line(alpha = 0.3) + # add individual line with transparency
+  stat_summary( # add average line
+    aes(group = 2),
+    fun = mean,
+    geom = "line",
+    color = "navy",
+    size = 1.5
+  ) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Reported Absenteeism", title = "Evolution of Absenteeism", subtitle = "With Individual Trajectory For Each Subject, N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(mod_abs$Day), breaks = mod_abs$Day)
+```
+
+
+
+
+
+# Distribution of Absenteeism answers 
+```{r}
+df_abs_no_na %>% 
+  filter(!(is.na(fix_abs_score) == TRUE)) %>% # just removing all rows of NA in abs 
+  mutate(y = 1) %>% 
+  mutate(Absenteeism = as.factor(fix_abs_score)) %>% 
+ggplot(aes(y = y, x = Day, fill = Absenteeism)) + 
+         geom_bar(position = "fill", stat = "identity") + 
+  theme_bw() +
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  scale_y_continuous(labels=c("0.00" = "0%", "0.25" = "25%", "0.50" = "50%", "0.75" = "75%", "1.00" = "100%")) +
+  scale_fill_manual(values = c("steelblue", "navy", "pink", "red")) +
+  labs(x = "Day", y = "Percentages of Reported Absenteeism", title ="The Distribution of Absenteeism Answers", subtitle = "No Data Was Available on Day 4 and 5. N = 34" ) +
+  theme(text=element_text(size=10, family="Georgia")) 
+```
+
+
+
+
+
+# Well-being and absenteeism 
+### Data prep:
+```{r}
+df_wb <- data_surv %>% 
+  select(Day, SurveyID, sat_Score, Absense_Score, wb_hap_Score, wb_he_Score, wb_so_Score, present_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+# fix variables:
+df_wb$fix_wb_hap <- ifelse(df_wb$wb_hap_Score > 10, NA, df_wb$wb_hap_Score)
+df_wb$fix_wb_he <- ifelse(df_wb$wb_he_Score > 10, NA, df_wb$wb_he_Score)
+df_wb$fix_wb_so <- ifelse(df_wb$wb_so_Score > 10, NA, df_wb$wb_so_Score)
+
+df_wb$fix_sat_score <- ifelse(df_wb$sat_Score > 10, NA, df_wb$sat_Score)
+df_wb$fix_abs_score <- ifelse(df_wb$Absense_Score > 10, NA, df_wb$Absense_Score)
+df_wb$fix_pres_score <- ifelse(df_wb$present_Score > 10, NA, df_wb$present_Score )
+
+
+# if all is NA remove row 
+df_wb_no_na <- df_wb %>% 
+  filter(!(is.na(fix_wb_hap) == TRUE) | !(is.na(fix_wb_he) == TRUE) | !(is.na(fix_wb_so) == TRUE))
+
+# length(unique(df_wb_no_na$SurveyID)) == 34
+```
+
+### Single Plots
+```{r}
+######## HEALTH ######## 
+df_wb_no_na %>% 
+  mutate(`Well-Being Score, Health` = as.factor(fix_wb_he)) %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = `Well-Being Score, Health`), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = `Well-Being Score, Health`), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "Day", y = "Average Level Of Absenteeism", title = "Absenteeism and Well-Being Health", subtitle = "Averaged Trajectory across Health Scores, N = 34") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "blue", "navy", "pink", "purple"))
+
+
+######## SOCIAL ######## 
+df_wb_no_na %>% 
+  mutate(`Well-Being Score, Social` = as.factor(fix_wb_so)) %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = `Well-Being Score, Social`), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = `Well-Being Score, Social`), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "Day", y = "Average Level Of Absenteeism", title = "Absenteeism and Well-Being Social", subtitle = "Averaged Trajectory across Social Scores, N = 34") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "blue", "navy", "pink", "purple"))
+
+
+
+######## HAPPINESS ######## 
+df_wb_no_na %>% 
+  mutate(`Well-Being Score, Happiness` = as.factor(fix_wb_hap)) %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = `Well-Being Score, Happiness`), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = `Well-Being Score, Happiness`), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "Day", y = "Average Level Of Absenteeism", title = "Absenteeism and Well-Being Happiness", subtitle = "Averaged Trajectory across Happiness Scores, N = 34") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("red", "magenta","steelblue", "blue", "navy", "pink"))
+```
+
+
+
+### Grouping well-being:
+Just an idea to make the plot a bit more nice - grouing well being by two factors: high and low. So if you are below the middle value you are in the low group and opposite for the high group. This is quite naive, there just seem to be a tendency in the plots above, so Ill try to make it a bit more appealing with only two (and not seven) well-being scores. 
+
+```{r}
+group_wb_dat <- df_wb_no_na 
+
+group_wb_dat$wb_social_group <- ifelse(df_wb_no_na$fix_wb_so >= 5, "High", ifelse(df_wb_no_na$fix_wb_so < 5 ,"Low", NA))
+group_wb_dat$wb_he_group <- ifelse(df_wb_no_na$fix_wb_he >= 5, "High", ifelse(df_wb_no_na$fix_wb_he < 5 ,"Low", NA))
+group_wb_dat$wb_hap_group <- ifelse(df_wb_no_na$fix_wb_hap >= 5, "High", ifelse(df_wb_no_na$fix_wb_hap < 5 ,"Low", NA))
+
+group_wb_plot <- group_wb_dat %>% 
+  select(Day, SurveyID, wb_social_group,wb_he_group, wb_hap_group, fix_abs_score, fix_sat_score)
+
+
+ppp1 <- group_wb_plot %>% 
+  rename(`Well-Being Group` = wb_social_group) %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = `Well-Being Group`), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = `Well-Being Group`), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "", y = "", title = "Well-Being Social") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "navy"))
+
+ppp2 <-group_wb_plot %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = wb_he_group), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = wb_he_group), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "", y = "", title = "Well-Being Health") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "navy"))
+
+ppp3 <-group_wb_plot %>% 
+  ggplot(aes(Day, fix_abs_score)) + 
+  stat_summary(aes(col = wb_hap_group), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = wb_hap_group), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.8) +
+  theme_bw() +
+  labs(x = "", y = "", title = "Well-Being Happiness") + 
+  theme(text=element_text(size=10, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(df_wb$Day), breaks = df_wb$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "navy"))
+
+
+group_wb_plot_abs <- ggarrange(ppp1, ppp2, ppp3, nrow = 3, common.legend = TRUE, legend="bottom")
+
+annotate_figure(group_wb_plot_abs, top = text_grob("The Dynamics of Averaged Absenteeism and Well-Being Groups",  
+               color = "Black", face = "bold", size = 14, family="Georgia"), bottom = text_grob("Day",  
+               color = "Black", size = 10, family="Georgia"), left = text_grob("Averaged Reported Absenteeism Across All Subjects, N = 34", rot = 90, color = "Black", size = 10, family="Georgia"))
+
+```
+
+
+
+
+
+# Satisfaction AND absenteeism 
+### combined plot sat and abs 
+```{r, warning=FALSE}
+df_merge <- data_surv %>% 
+  select(Day, SurveyID, sat_Score, Absense_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+df_merge$fix_abs_score <- ifelse(df_merge$Absense_Score > 10, NA, df_merge$Absense_Score)
+df_merge$fix_sat_score <- ifelse(df_merge$sat_Score > 10, NA, df_merge$sat_Score)
+
+merged_no_na <- df_merge %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_sat_score) == TRUE))
+
+df_merge %>% 
+  ggplot(aes(x = Day)) + 
+    geom_line(aes(y = fix_abs_score), color = "grey") + 
+    stat_summary( # add average line
+    aes(y = fix_abs_score, group = 2),
+    fun = mean,
+    geom = "line",
+    color = "navy",
+    size = 1.0
+  ) +
+    geom_line(aes(y = fix_sat_score), color = "darkgrey") +
+    stat_summary( # add average line
+    aes(y = fix_sat_score, group = 2),
+    fun = mean,
+    geom = "line",
+    color = "steelblue3",
+    size = 1.0 
+  ) +
+  labs(x = "Day", y = "Reported Score", title = "Evolution of Absenteeism and Satisfaction", subtitle = "With Averaged Trajectory Across Subjects, N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12, family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(df_merge$Day), breaks = df_merge$Day) +
+  annotate(geom="text", x=24, y=3.7, label="Satisfaction", color="steelblue", family = "Georgia", size = 3.5, fontface="bold") +
+  annotate(geom="text", x=24, y=1.7, label="Abseenteism", color="navy", family = "Georgia", size = 3.5, fontface="bold")
+
+  
+
+
+merged_no_na %>% 
+  ggplot(aes(x = Day, group = SurveyID)) + 
+    geom_line(aes(y = fix_abs_score), color = "grey") + 
+    stat_summary( # add average line
+    aes(y = fix_abs_score, group = 2),
+    fun = mean,
+    geom = "line",
+    color = "navy",
+    size = 1.0
+  ) +
+    geom_line(aes(y = fix_sat_score), color = "darkgrey") +
+    stat_summary( # add average line
+    aes(y = fix_sat_score, group = 2),
+    fun = mean,
+    geom = "line",
+    color = "steelblue3",
+    size = 1.0 
+  ) +
+  labs(x = "Day", y = "Reported Score", title = "Evolution of Absenteeism and Satisfaction", subtitle = "With Individual Trajectory For Each Subject, N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12, family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(df_merge$Day), breaks = df_merge$Day) +
+  annotate(geom="text", x=24, y=3.7, label="Satisfaction", color="steelblue", family = "Georgia", size = 3.5, fontface="bold") +
+  annotate(geom="text", x=23.8, y=2.2, label="Abseenteism", color="navy", family = "Georgia", size = 3.5, fontface="bold")
+
+
+```
+
+
+
+
+
+
+
+
+# Satisfaction BY absenteeism and vice versa
+#### plots
+```{r,warning=FALSE}
+merged_no_na %>% 
+  filter(!is.na(fix_sat_score) == TRUE) %>% 
+  mutate(Satisfaction = as.factor(fix_sat_score)) %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  #geom_line(aes(y = fix_abs_score), color = "grey") +
+  stat_summary(aes(col = Satisfaction), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Averaged Absenteeism", title = "Dynamics of Absenteeism by Reported Satisfaction", subtitle = "N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(df_merge$Day), breaks = df_merge$Day) +
+  scale_colour_manual(values = c("steelblue", "navy", "pink")) 
+
+
+merged_no_na %>% 
+  filter(!is.na(fix_abs_score) == TRUE) %>% 
+  mutate(Absenteeism = as.factor(fix_abs_score)) %>% 
+ggplot(aes(Day, fix_sat_score)) + 
+  stat_summary(aes(col = Absenteeism), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Averaged Satisfaction", title = "Dynamics of Satisfaction by Reported Absenteeism", subtitle = "N = 34") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(df_merge$Day), breaks = df_merge$Day) +
+  scale_colour_manual(values = c("red","steelblue", "navy", "pink")) 
+
+```
+
+
+
+
+
+# Absenteeism and LS
+#### prep data: 
+```{r}
+df_lead <- read_csv("/Users/laura/Desktop/work_bss/data/ls_pres_abs_data.csv")
+
+df_lead_abs_LS1 <- df_lead %>% 
+  rename(LS1 = fix_ls1_score) %>% 
+  mutate(LS1 = as.factor(LS1)) %>% 
+  drop_na(c("LS1"))
+
+
+df_lead_abs_LS2 <- df_lead %>% 
+  rename(LS2 = fix_ls2_score) %>% 
+  mutate(LS2 = as.factor(LS2)) %>% 
+  drop_na(c("LS2"))
+
+df_lead_abs_LS3 <- df_lead %>% 
+  rename(LS3 = fix_ls3_score) %>% 
+  mutate(LS3 = as.factor(LS3)) %>% 
+  drop_na(c("LS3"))
+```
+
+#### plot 
+```{r, warning=FALSE}
+################ LS 1 ################ 
+df_lead_abs_LS1$LS <- ifelse(df_lead_abs_LS1$LS1 == 5, "Strongly Agree", ifelse(df_lead_abs_LS1$LS1 == 4, "Agree", ifelse(df_lead_abs_LS1$LS1 == 3, "Neither Agree Nor Disagree", NA)))
+
+LS1_plot_smooth <- df_lead_abs_LS1 %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  #geom_jitter(aes(col = LS), alpha = 0.5, size = 0.3) +
+  stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() +
+  labs(x = "", y = "", title = "I Could Ask My Superviser for Help (ls1)") + 
+  theme(text=element_text(size=8, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "blue", "navy"))
+
+
+################ LS 2 ################ 
+df_lead_abs_LS2$LS <- ifelse(df_lead_abs_LS2$LS2 == 5, "Strongly Agree", ifelse(df_lead_abs_LS2$LS2 == 4, "Agree", ifelse(df_lead_abs_LS2$LS2 == 3, "Neither Agree Nor Disagree", NA)))
+
+
+LS2_plot_smooth <- df_lead_abs_LS2 %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  #geom_jitter(aes(col = LS), alpha = 0.5, size = 0.3) +
+ stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+   stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() +
+  labs(x = "", y = "", title = "I Could Count on My Supervisor when Facing Difficulties (ls2)") + 
+  theme(text=element_text(size=8, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "blue", "navy"))
+
+
+################ LS 3 ################ 
+df_lead_abs_LS3$LS <- ifelse(df_lead_abs_LS3$LS3 == 5, "Strongly Agree", ifelse(df_lead_abs_LS3$LS3 == 4, "Agree", ifelse(df_lead_abs_LS3$LS3 == 3, "Neither Agree Nor Disagree", NA)))
+
+LS3_plot_smooth <- df_lead_abs_LS3 %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  #geom_jitter(aes(col = LS), alpha = 0.5, size = 0.3) +
+  stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+   stat_summary(aes(col = LS), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() +
+  labs(x = "", y = "", title = "My Work Was Recognized by My Supervisor (ls3)") + 
+  theme(text=element_text(size=8, family="Georgia")) + 
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(1,5)+
+  scale_color_manual(values = c("steelblue", "blue", "navy"))
+
+
+big_plot <- ggarrange(LS1_plot_smooth, LS2_plot_smooth, LS3_plot_smooth, nrow = 3, common.legend = TRUE, legend="bottom")
+
+annotate_figure(big_plot, top = text_grob("The Dynamics of Averaged Absenteeism and Leadership over Time",  
+               color = "Black", face = "bold", size = 14, family="Georgia"), bottom = text_grob("Day",  
+               color = "Black", size = 10, family="Georgia"), left = text_grob("Averaged Reported Absenteeism Across All Subjects, N = 23", rot = 90, color = "Black", size = 10, family="Georgia"))
+
+#N <- length(unique(df_lead_abs_LS1$SurveyID))
+
+
+```
+
+
+
+
+# Valence and Absenteeism
+OBS den her har ændret sig, men hvorfor kan jeg virkelig ikke lure. Den herunder er den rigtige. 
+```{r}
+df_valence <- data_surv %>% 
+  select(Day, SurveyID, Absense_Score, event_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232) %>% 
+  rename(valence = event_Score)
+
+#### fix so no 99,97 etc
+df_valence$fix_abs_score <- ifelse(df_valence$Absense_Score > 10, NA, df_valence$Absense_Score)
+
+# fix so character
+df_valence$valence_char <- ifelse(df_valence$valence == 1, "Positive Event", "No Event")
+
+df_val_no_na <- df_valence %>% 
+  filter(!(is.na(valence_char) == TRUE))
+
+
+df_val_no_na %>% 
+  rename(Valence = valence_char) %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  geom_line(alpha = 0.25) + # add individual line with transparency
+  stat_summary(aes(col = Valence), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.8) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Absenteeism", title = "Evolution of Absenteeism", subtitle = "Averaged Across Subject by Valence, N = 31") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  scale_color_manual(values = c("steelblue", "navy"))
+
+```
+
+
+
+
+
+
+# Age and Absenteeism
+#### Data prep:
+```{r}
+baseline_dat <- read.csv("/Users/laura/Desktop/work_bss/data/all_data_merged.csv")
+
+baseline_dat %>% 
+  group_by(age) %>% 
+  summarise(n())
+
+df_age <- baseline_dat %>% 
+  select(Day, SurveyID, sat_Score, Absense_Score, age) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+df_age$fix_sat_score <- ifelse(df_age$sat_Score > 10, NA, df_age$sat_Score)
+df_age$fix_abs_score <- ifelse(df_age$Absense_Score > 10, NA, df_age$Absense_Score)
+
+
+df_age_no_na <- df_age %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_sat_score) == TRUE))
+
+length(unique(df_age_no_na$SurveyID))
+
+# making age groups
+df_age_no_na$age_group <- ifelse(df_age_no_na$age %in% c(1:30), 1, ifelse(df_age_no_na$age %in% c(31:50), 2, ifelse(df_age_no_na$age %in% c(51:60), 3, ifelse(df_age_no_na$age %in% c(60:100), 4, NA))))
+
+df_age_no_na$age_group_car <- ifelse(df_age_no_na$age_group == 1, "Age 18-30, 3", ifelse(df_age_no_na$age_group == 2, "Age 31-50, 6", ifelse(df_age_no_na$age_group == 3, "Age 51-60, 10", ifelse(df_age_no_na$age_group == 4, "Age 60-65, 7", NA))))
+
+#unique(df_age_no_na$SurveyID)
+#unique(df_age$SurveyID) # its id 122 that is removed when the NAs are removed (she only answered NAs)
+# this person is 62 years old, so this subject was from the "Age 51-60" group. 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+#### plot 
+```{r, warning=FALSE}
+df_age_no_na %>% 
+rename(`Ages (N)` = age_group_car) %>% 
+ggplot(aes(Day, fix_abs_score)) + 
+  #geom_line(alpha = 0.25) + # add individual line with transparency
+  stat_summary(aes(col = `Ages (N)`), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.8) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Absenteeism", title = "Evolution of Absenteeism by Age", subtitle = "Averaged Across Subjects of 4 Groups of Age, N = 26\n(No Data Was Available on Day 4 and 5)") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  scale_color_manual(values = c("steelblue", "navy", "pink", "red"))
+
+```
+
+
+
+
+# Unique individual plots
+```{r}
+random_id_dat <- df_abs_no_na %>% 
+  filter(SurveyID %in% c(221, 291, 149, 275,163,245))
+
+ggplot(random_id_dat, aes(Day, fix_abs_score)) + 
+  facet_wrap(~SurveyID)+ 
+  geom_line(aes(col = SurveyID)) +
+  geom_point(aes(col = SurveyID)) +
+  theme_bw() + # nice theme
+  labs(x = "Day", y = "Absenteeism", title = "Absenteeism", subtitle = "Individual Trajectory for Six Random Selected Subjects") + 
+  theme_bw() + 
+  theme(text=element_text(size=12,  family="Georgia")) + 
+  scale_x_continuous("Day", labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  theme(legend.position="none") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = 6))
+```
+
+
+
+
+# Leader variables and ES
+### data prep:
+```{r}
+raw_leader_dat <- read_csv("/Users/laura/Desktop/work_bss/data/leader_survey_data.csv")
+
+
+# ES
+es_lead <- raw_leader_dat %>% 
+  select(SurveyID, Day, es_1_Score, es_2_Score, es_3_Score)
+
+es_lead$fix_es1 <- ifelse(es_lead$es_1_Score > 10, NA, es_lead$es_1_Score)
+es_lead$fix_es2 <- ifelse(es_lead$es_2_Score > 10, NA, es_lead$es_2_Score)
+es_lead$fix_es3 <- ifelse(es_lead$es_3_Score > 10, NA, es_lead$es_3_Score)
+
+es_lead_no_na <- es_lead %>% 
+  filter(!(is.na(fix_es1) == TRUE) | !(is.na(fix_es2) == TRUE) | !(is.na(fix_es3) == TRUE))
+
+```
+
+merging data:
+```{r}
+# lav en mean df for hver af ls per dag og merch 
+ls_means <- df_lead %>% 
+  group_by(Day) %>% 
+  summarise(mean_ls1 = mean(fix_ls1_score, na.rm = TRUE),
+            mean_ls2 = mean(fix_ls2_score, na.rm = TRUE),
+            mean_ls3 = mean(fix_ls3_score, na.rm = TRUE))
+
+es_ls_dat <- inner_join(es_lead, ls_means, by = "Day")
+
+merge_plot <- es_ls_dat %>% 
+  pivot_longer(
+    cols = c(mean_ls1, mean_ls2, mean_ls3,fix_es1, fix_es2, fix_es3 ), 
+    names_to = "ES/LS" 
+  ) 
+
+merge_plot$`ES/LS` <- ifelse(merge_plot$`ES/LS` == "mean_ls1", "LS 1: Help", ifelse(merge_plot$`ES/LS` == "mean_ls2", "LS 2: Availability", ifelse(merge_plot$`ES/LS` == "mean_ls3", "LS 3: Recognization", ifelse(merge_plot$`ES/LS` == "fix_es1", "ES 1: Help", ifelse(merge_plot$`ES/LS` == "fix_es2", "ES 2: Availability", ifelse(merge_plot$`ES/LS` == "fix_es3", "ES 3: Recognization", NA))))))
+
+```
+
+### plot:
+```{r}
+#ls 1 and es1:
+merg1 <- merge_plot %>% 
+  filter(`ES/LS` %in% c("LS 1: Help", "ES 1: Help")) %>% 
+  rename(Position = `ES/LS`)
+
+merg1$Position <- ifelse(merg1$Position == "LS 1: Help", "Employees", ifelse(merg1$Position == "ES 1: Help", "Leader", NA))
+
+pl1 <- merg1 %>% 
+ggplot(aes(x = Day, y = value)) + 
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() + # nice theme
+  labs(x = "", y = "", title = "LS1/ES1: Help") + 
+  theme_bw() + 
+  theme(text=element_text(size=10,  family="Georgia")) +
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(2.5,6) +
+  scale_color_manual(values = c("steelblue", "magenta"))
+
+#ls 2 and es2:
+merg2 <- merge_plot %>% 
+  filter(`ES/LS` %in% c("LS 2: Availability", "ES 2: Availability")) %>% 
+  rename(Position = `ES/LS`)
+
+merg2$Position <- ifelse(merg2$Position == "LS 2: Availability", "Employees", ifelse(merg2$Position == "ES 2: Availability", "Leader", NA))
+
+pl2 <- merg2 %>% 
+ggplot(aes(x = Day, y = value)) + 
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() + # nice theme
+  labs(x = "", y = "", title = "LS2/ES2: Countability") + 
+  theme_bw() + 
+  theme(text=element_text(size=10,  family="Georgia")) +
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(2.5,6) +
+  scale_color_manual(values = c("steelblue", "magenta"))
+
+
+#ls 2 and es2:
+merg3 <- merge_plot %>% 
+  filter(`ES/LS` %in% c("LS 3: Recognization", "ES 3: Recognization"))  %>% 
+  rename(Position = `ES/LS`)
+
+merg3$Position <- ifelse(merg3$Position == "LS 3: Recognization", "Employees", ifelse(merg3$Position == "ES 3: Recognization", "Leader", NA))
+
+pl3 <- merg3 %>% 
+ggplot(aes(x = Day, y = value)) + 
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "line",
+                  size = 0.6) +
+  stat_summary(aes(col = Position), 
+                  fun = mean,
+                  geom = "point",
+                  size = 0.6) +
+  theme_bw() + # nice theme
+  labs(x = "", y = "", title = "LS3/ES3: Recognization") + 
+  theme_bw() + 
+  theme(text=element_text(size=10,  family="Georgia")) +
+  scale_x_continuous(labels = as.character(mod_abs$Day), breaks = mod_abs$Day) +
+  ylim(2.5,6) +
+  scale_color_manual(values = c("steelblue", "magenta"))
+
+esls_plot <- ggarrange(pl1, pl2, pl3, nrow = 3, common.legend = TRUE, legend="bottom")
+
+annotate_figure(esls_plot, top = text_grob("The Dynamics Between Leader and Employee Reports",  
+               color = "Black", face = "bold", size = 14, family="Georgia"), bottom = text_grob("Day",  
+               color = "Black", size = 10, family="Georgia"), left = text_grob("Reported ES (N = 1) and LS (N = 23) ", rot = 90, color = "Black", size = 10, family="Georgia"))
+```
+
+

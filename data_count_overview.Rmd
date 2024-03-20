@@ -1,0 +1,331 @@
+---
+title: "count data"
+author: "LAURA PAABY"
+date: "2023-08-16"
+output: html_document
+---
+
+```{r}
+pacman::p_load(tidyverse)
+```
+
+
+
+# BIG DATA 
+==> optælling af hvor mange respondenter vi har som har besvaret baseline OG diary study gennem hele perioden/det meste af perioden
+
+```{r}
+big_df <- read.csv("/Users/laura/Desktop/work_bss/data/all_data_merged.csv")
+
+# List of column names to process
+columns_to_process <- c("Absense_Score", "present_Score", "ls1_Score", "ls2_Score", "ls3_Score", "wb_he_Score", "wb_hap_Score", "wb_so_Score")
+
+# Loop through each column and apply the condition
+for (col in columns_to_process) {
+  big_df[[paste0("fix_", col)]] <- ifelse(big_df[[col]] > 10, NA, big_df[[col]])
+}
+
+```
+
+
+**Function to count:**
+```{r}
+count_participants <- function(variable_names, total_days_criteria) {
+
+  # Filter out rows with missing survey data
+  survey_data <- big_df %>%
+    filter(!rowSums(is.na(select(., all_of(variable_names)))))
+  
+  # find all subjects present in this df 
+  subjects_in_total <- length(unique(survey_data$SurveyID))
+
+  # Count the number of days each subject has answered in the survey data
+  subject_answered_days <- survey_data %>%
+    group_by(SurveyID) %>%
+    summarize(total_days = n_distinct(Day))
+
+  # Filter subjects who have answered the specified number of days for all variables
+  subjects_with_criteria <- subject_answered_days %>%
+    filter(total_days >= total_days_criteria)
+
+  # Count the number of subjects meeting the criteria
+  num_subjects <- nrow(subjects_with_criteria)
+  
+  # find mean number of days 
+  mean_days <- mean(subject_answered_days$total_days)
+  
+  return(c(subjects_in_total, num_subjects, mean_days))
+}
+```
+
+
+Now using this function on selected variables looping through 30 days of observations: 
+
+**All variables:**
+```{r}
+var_names_all <- c("fix_ls1_Score", "fix_ls2_Score", "fix_ls3_Score", "fix_present_Score", "fix_Absense_Score", "fix_wb_hap_Score", "fix_wb_he_Score", "fix_wb_so_Score")
+
+count_participants(var_names, 9)
+```
+
+**absense thoughts, LS1, LS2 og LS3 **
+```{r}
+# Create an empty data frame to store the results
+results_df_ABS_LS <- data.frame(Total_Days_Criteria = numeric(0),
+                          Subjects_In_Total = numeric(0),
+                          Num_Subjects = numeric(0),
+                          Mean_Days = numeric(0))
+
+
+# names of variables:
+var_ABS_LS <- c("fix_ls1_Score", "fix_ls2_Score", "fix_ls3_Score", "fix_Absense_Score")
+
+# Loop through total_days_criteria from 30 to 1
+for (criteria in 30:1) {
+  result <- count_participants(var_ABS_LS, criteria)
+  subjects_in_total <- result[1]
+  num_subjects <- result[2]
+  mean_days <- result[3]
+  
+  # Append the results to the data frame
+  results_df_ABS_LS <- rbind(results_df_ABS_LS, data.frame(Total_Days_Criteria = criteria,
+                                              Subjects_In_Total = subjects_in_total,
+                                              Num_Subjects = num_subjects,
+                                              Mean_Days = mean_days))
+  
+}
+```
+
+
+**absense thoughts, wb_health, wb_social og wb_happy:**
+```{r}
+# Create an empty data frame to store the results
+results_df_ABS_WB<- data.frame(Total_Days_Criteria = numeric(0),
+                          Subjects_In_Total = numeric(0),
+                          Num_Subjects = numeric(0),
+                          Mean_Days = numeric(0))
+
+
+# names of variables:
+var_ABS_WB <- c("fix_Absense_Score", "fix_wb_hap_Score", "fix_wb_he_Score", "fix_wb_so_Score")
+
+# Loop through total_days_criteria from 30 to 1
+for (criteria in 30:1) {
+  result <- count_participants(var_ABS_WB, criteria)
+  subjects_in_total <- result[1]
+  num_subjects <- result[2]
+  mean_days <- result[3]
+  
+  # Append the results to the data frame
+  results_df_ABS_WB <- rbind(results_df_ABS_WB, data.frame(Total_Days_Criteria = criteria,
+                                              Subjects_In_Total = subjects_in_total,
+                                              Num_Subjects = num_subjects,
+                                              Mean_Days = mean_days))
+}
+
+```
+
+
+
+**presenteeism, LS1, LS2 og LS3 **
+```{r}
+# Create an empty data frame to store the results
+results_df_pres_LS <- data.frame(Total_Days_Criteria = numeric(0),
+                          Subjects_In_Total = numeric(0),
+                          Num_Subjects = numeric(0),
+                          Mean_Days = numeric(0))
+
+
+# names of variables:
+var_pres_ls <- c("fix_ls1_Score", "fix_ls2_Score", "fix_ls3_Score", "fix_present_Score")
+
+# Loop through total_days_criteria from 30 to 1
+for (criteria in 30:1) {
+  result <- count_participants(var_pres_ls, criteria)
+  subjects_in_total <- result[1]
+  num_subjects <- result[2]
+  mean_days <- result[3]
+  
+  # Append the results to the data frame
+  results_df_pres_LS <- rbind(results_df_pres_LS, data.frame(Total_Days_Criteria = criteria,
+                                              Subjects_In_Total = subjects_in_total,
+                                              Num_Subjects = num_subjects,
+                                              Mean_Days = mean_days))
+}
+
+```
+
+
+**presenteeism, wb_health, wb_social og wb_happy:**
+```{r}
+# Create an empty data frame to store the results
+results_df_pres_WB <- data.frame(Total_Days_Criteria = numeric(0),
+                          Subjects_In_Total = numeric(0),
+                          Num_Subjects = numeric(0),
+                          Mean_Days = numeric(0))
+
+
+# names of variables:
+var_pres_ls <- c("fix_wb_hap_Score", "fix_wb_he_Score", "fix_wb_so_Score", "fix_present_Score")
+
+# Loop through total_days_criteria from 30 to 1
+for (criteria in 30:1) {
+  result <- count_participants(var_pres_ls, criteria)
+  subjects_in_total <- result[1]
+  num_subjects <- result[2]
+  mean_days <- result[3]
+  
+  # Append the results to the data frame
+  results_df_pres_WB <- rbind(results_df_pres_WB, data.frame(Total_Days_Criteria = criteria,
+                                              Subjects_In_Total = subjects_in_total,
+                                              Num_Subjects = num_subjects,
+                                              Mean_Days = mean_days))
+}
+
+```
+
+
+
+# Missing Data Analysis:
+```{r}
+pacman::p_load(finalfit, misty,BaylorEdPsych)
+```
+
+
+```{r}
+mis_dat <- big_df %>% 
+  select(Day, SurveyID, Absense_Score, ls1_Score, ls2_Score,ls3_Score, wb_so_Score, wb_hap_Score, wb_he_Score, present_Score, s6_Score, sat_Score, Contact_Score)
+
+mis_dat[mis_dat == 99] <- NA
+
+mis_dat %>% 
+  missing_plot()
+```
+
+```{r}
+little_test <- na.test(mis_dat, digits = 2, p.digits = 10, as.na = NULL, check = TRUE, output = TRUE)
+
+little_test$result
+```
+Given the high statistic value and low p-value, we can conclude that the data is not missing completely at random. 
+
+
+https://cloud.r-project.org/web/packages/finalfit/vignettes/missing.html <- `mice` is the most common way to impute data, so that might be a way to go. 
+
+
+### Data imputation
+This is done for 99 and initial NAs 
+
+Lets first look at the missing data:
+```{r}
+pacman::p_load(mice, VIM)
+md_pat <- md.pattern(mis_dat)
+
+aggr_plot <- aggr(mis_dat, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(data), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+
+
+```{r}
+tempData <- mice(mis_dat,m=5,maxit=50,meth='pmm',seed=500)
+summary(tempData)
+
+
+stripplot(tempData, pch = 20, cex = 1.2)
+
+```
+making all cols numeric to make them imputable by another methods 
+```{r}
+df_mis <- mis_dat
+columns_to_convert <- c("ls1_Score", "ls2_Score", "ls3_Score", "Absense_Score", "wb_so_Score", "wb_hap_Score", "wb_he_Score", "present_Score", "s6_Score", "sat_Score", "Contact_Score")
+
+for (col in columns_to_convert) {
+  df_mis[[col]] <- as.factor(df_mis[[col]])
+}
+
+#df_mis[df_mis == 98] <- "A"
+#df_mis[df_mis == 97] <- "B"
+#df_mis[df_mis == 96] <- "C"
+
+##### NOW TRYING DIFFERENT IMPUTATION METHODS: 
+tempData1 <- mice(df_mis,m=5,maxit=50,meth='polyreg',seed=500)
+
+tempData2 <- mice(df_mis,m=3,maxit=10,meth='polr',seed=20) #### DEN HER ER BEDST
+
+```
+
+*I use the polyreg method, as we are dealing with ordinal data. *
+
+```{r}
+df_mis %>% 
+  group_by(Day) %>% 
+  count()
+
+```
+
+
+```{r}
+#### choosing a final DF 
+completedData2 <- complete(tempData2,2)
+
+
+#### Inspecting the initial distribution versus the imputed:
+df_mis %>% 
+  group_by(ls1_Score)
+
+
+completedData2 %>% 
+  group_by("ls1_Score") %>% 
+  count()
+
+imputed_survey_dat <- completedData2
+write_csv(imputed_survey_dat, "/Users/laura/Desktop/work_bss/data/imputed_survey_dat.csv")
+```
+
+
+
+
+
+# Power analysis 
+
+```{r}
+# Check if R packages are installed
+
+list.of.packages = c("htmltools","shiny","htmltools","shiny","DT","nlme","ggplot2","gridExtra",
+"data.table","plyr","dplyr","formattable","tidyr","MASS","shinyjs","compiler","future.apply","devtools")
+new.packages = list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+library(htmltools)
+library(shiny)
+library(DT)
+library(nlme)
+library(ggplot2)
+library(gridExtra)
+library(data.table)
+library(plyr)
+library(dplyr)
+library(formattable)
+library(tidyr)
+library(MASS)
+library(shinyjs)
+library(compiler)
+library(future.apply)
+
+library(devtools)
+devtools::install_github("ginettelafit/PowerAnalysisIL", force = T)
+
+library(PowerAnalysisIL)
+
+# Using Gist: users can launch this app with:
+shiny::runGist('6bac9d35c2521cc4fd91ce4b82490236')
+
+```
+
+
+
+
+
+
+
+
+

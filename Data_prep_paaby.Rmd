@@ -1,0 +1,826 @@
+---
+title: "BSS Dep Man"
+author: "LAURA PAABY"
+date: "2023-05-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, readxl, lme4)
+
+### read data:
+data <- read_excel("data/XL_Diary_study_merged_data.xlsx")
+
+#### used to display that 
+data %>% 
+  filter(SurveyID == 264)
+
+```
+
+
+```{r}
+data %>% 
+  group_by(SurveyID) %>% 
+  summarise(n()) # three missing ... 
+
+# removing missing MAYBE THIS INSTEAD SHOULD BE RENAMED DUNNO
+data %>% 
+  filter(SurveyID == "missing")
+
+data1 <- data %>% 
+  filter(SurveyID != "missing")
+
+# checking
+data1 %>% 
+  group_by(SurveyID) %>% 
+  summarise(n())
+
+raw_data <- data1
+head(raw_data)
+
+```
+Cons_1 ==> consensus, I would argue that people without consensus should be deleted. 
+
+GOTTA BE OBS HERE - NEED TO BE MATCHABLE WITH BASELINE 
+
+survey id has a *missing* I'll just turn into 0 ==> I assume that this are AK and Maries testers 
+survey id has a *new* I'll just turn into 1
+```{r}
+#raw_data$SurveyID <- ifelse(raw_data$SurveyID == "missing", "0", raw_data$SurveyID )
+raw_data$SurveyID <- ifelse(raw_data$SurveyID == "new", "1", raw_data$SurveyID )
+unique(raw_data$SurveyID)
+unique(data$SurveyID)
+
+
+raw_data$SurveyID <- as.factor(raw_data$SurveyID)
+```
+
+# FILTER EACH QUESTION 
+```{r}
+data_names <- raw_data %>% 
+  rename(consensus = cons_1)
+
+# wb hap == level of happiness at work (1-7)
+wb_hap <- raw_data %>% 
+  select(starts_with("wb_hap"), "SurveyID")
+
+# wb so == level of social engagement (1-7)
+wb_so <- raw_data %>% 
+  select(starts_with("wb_so"), "SurveyID")
+
+# wb so == level of helbred (1-7)
+wb_he <- raw_data %>% 
+  select(starts_with("wb_he"), "SurveyID")
+
+# wb so == PRESENTEISM (Har du arbejdet i dag, selv om du ikke følte dig frisk nok til at arbejde?)
+# NEJ = 1, Ja = antal i S6
+presenteism <- raw_data %>% 
+  select(starts_with("pre"), "SurveyID") %>% 
+  mutate_if(is.character, as.numeric) ### for some reason they arent all numeric:
+presenteism$SurveyID <- as.character(presenteism$SurveyID)
+
+S6_pres <- raw_data %>% 
+  select(starts_with("s_6"), "SurveyID") %>% 
+  mutate_if(is.character, as.numeric) ### for some reason they arent all numeric:
+S6_pres$SurveyID <- as.character(S6_pres$SurveyID)
+
+
+# wb so == level of absense that you should have done (1-5) - 1 = hele tiden, 5 = slet ikke.  
+#(Har du i dag tænkt på at du burde have været hjemme i stedet for på arbejde?)
+absense <- raw_data %>% 
+  select(starts_with("abs"), "SurveyID")
+
+# contact with leader today (1 ja fysisk, 2, ja digitalt, 3 nej)
+contact <- raw_data %>% 
+  select(starts_with("cont"), "SurveyID")
+
+# satisfaction with leader today (1-5)
+sat <- raw_data %>% 
+  select(starts_with("sat"), "SurveyID")
+
+# ask help from leader today (1-5), 1 is very agree, 5 is very disagree 
+ls_1 <- raw_data %>% 
+  select(starts_with("ls_1"), "SurveyID")
+
+# count on leader today (1-5) 1 is very agree, 5 is very disagree 
+ls_2 <- raw_data %>% 
+  select(starts_with("ls_2"), "SurveyID")
+
+
+# acknowledgement from leader today (1-5) 1 is very agree, 5 is very disagree 
+ls_3 <- raw_data %>% 
+  select(starts_with("ls_3"), "SurveyID")
+
+
+# event (pos or neg) with leader today (1 yes, 2 no, 3 neither nor) 
+event <- raw_data %>% 
+  select(!starts_with("ev_1_")) %>% 
+  select(starts_with("ev"), "SurveyID")
+
+# evaluation and comment:
+evaluation <- raw_data %>% 
+  select(starts_with("ev_1_"), "SurveyID")
+
+```
+
+
+
+# FIX WIDE FORMAT
+```{r}
+###### MAKING ALL LONG FORMAT: ##### 
+abs_long <- absense %>%
+  pivot_longer(!SurveyID, names_to = "absense_var", values_to = "Absense_Score")
+
+contact_long <- contact %>%
+  pivot_longer(!SurveyID, names_to = "cont_var", values_to = "Contact_Score")
+
+eval_long <- evaluation %>%
+  pivot_longer(!SurveyID, names_to = "eval_var", values_to = "eval_Score")
+
+event_long <- event %>%
+  pivot_longer(!SurveyID, names_to = "event_var", values_to = "event_Score")
+
+ls1_long <- ls_1 %>%
+  pivot_longer(!SurveyID, names_to = "ls1_var", values_to = "ls1_Score")
+
+ls2_long <- ls_2 %>%
+  pivot_longer(!SurveyID, names_to = "ls2_var", values_to = "ls2_Score")
+
+ls3_long <- ls_3 %>%
+  pivot_longer(!SurveyID, names_to = "ls3_var", values_to = "ls3_Score")
+
+presenteism_long <- presenteism %>%
+  pivot_longer(!SurveyID, names_to = "present_var", values_to = "present_Score")
+
+s6_long <- S6_pres %>%
+  pivot_longer(!SurveyID, names_to = "s6_var", values_to = "s6_Score")
+
+sat_long <- sat %>%
+  pivot_longer(!SurveyID, names_to = "sat_var", values_to = "sat_Score")
+
+wb_hap_long <- wb_hap %>%
+  pivot_longer(!SurveyID, names_to = "wb_hap_var", values_to = "wb_hap_Score")
+
+wb_he_long <- wb_he %>%
+  pivot_longer(!SurveyID, names_to = "wb_he_var", values_to = "wb_he_Score")
+
+wb_so_long <- wb_so %>%
+  pivot_longer(!SurveyID, names_to = "wb_so_var", values_to = "wb_so_Score")
+```
+
+
+
+##### time column fix 
+```{r}
+#### function to fix time:
+add_time_column <- function(data, var_prefix, abs_var) {
+  data$time <- NA
+  for (i in 1:26) {
+    var_name <- paste0(var_prefix, i)
+    data$time <- ifelse(grepl(var_name, abs_var), i, data$time)
+  }
+  return(data)
+}
+
+### using on all dfs:
+abs_long <- add_time_column(abs_long, "abs_", abs_long$absense_var)
+contact_long <- add_time_column(contact_long, "cont_", contact_long$cont_var)
+eval_long <- add_time_column(eval_long, "ev_1_", eval_long$eval_var)
+event_long <- add_time_column(event_long, "ev_", event_long$event_var) #### FIKS DAG 25
+
+ls1_long <- add_time_column(ls1_long, "ls_1_d", ls1_long$ls1_var)
+ls2_long <- add_time_column(ls2_long, "ls_2_d", ls2_long$ls2_var)
+ls3_long <- add_time_column(ls3_long, "ls_3_d", ls3_long$ls3_var)
+
+
+presenteism_long <- add_time_column(presenteism_long, "pre_d", presenteism_long$present_var)
+s6_long <- add_time_column(s6_long, "s_6_d", s6_long$s6_var)
+
+sat_long <- add_time_column(sat_long, "sat_", sat_long$sat_var)
+
+
+wb_hap_long <- add_time_column(wb_hap_long, "wb_hap_d", wb_hap_long$wb_hap_var)
+wb_he_long <- add_time_column(wb_he_long, "wb_he_d", wb_he_long$wb_he_var)
+wb_so_long <- add_time_column(wb_so_long, "wb_so_d", wb_so_long$wb_so_var)
+```
+
+first just fixing day 25 in event:
+```{r}
+event_long$time <- event_long$time %>%
+  replace_na(25)
+
+```
+
+
+
+#### COMBINING ALL DATA: 
+this way takes for ever dunno why
+```{r}
+# create a list of 10 data frames
+# didn't use but nice for overview 
+dfs <- list(abs_long, contact_long, eval_long, event_long, ls1_long, ls2_long, ls3_long, presenteism_long, s6_long, sat_long, wb_hap_long, wb_he_long, wb_so_long)
+
+# perform an inner join on the "time" and "ID" variables
+merged1 <- inner_join(abs_long, contact_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged2 <- inner_join(merged1, eval_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged3 <- inner_join(merged2, event_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged4 <- inner_join(merged3, ls1_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged5 <- inner_join(merged4, ls2_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged6 <- inner_join(merged5, ls3_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged7 <- inner_join(merged6, presenteism_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged8 <- inner_join(merged7, s6_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged9 <- inner_join(merged8, sat_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged10 <- inner_join(merged9, wb_hap_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged11 <- inner_join(merged10, wb_he_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged12 <- inner_join(merged11, wb_so_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+
+# view the merged data frame
+final_long_df <- merged12 %>%
+  select(!ends_with("var")) 
+
+final_long_df %>% 
+  group_by(SurveyID) %>% 
+  summarise(n()) 
+
+final_long_df <- final_long_df %>%
+  rename(Day = time, 
+         eval_comment = eval_Score) %>% 
+  select(Day, SurveyID, everything())
+
+### DUMMY CODING SICKNESS 
+final_long_df$day_off <- ifelse(final_long_df$Absense_Score == 96, 1, 0)
+final_long_df$sickness <- ifelse(final_long_df$Absense_Score == 97, 1, 0)
+final_long_df$absent_oth_reason <- ifelse(final_long_df$Absense_Score == 98, 1, 0)
+final_long_df$miss_ans <- ifelse(final_long_df$Absense_Score == 99, 1, 0)
+
+```
+# svarrate count:
+(hvis 91 er med:)
+```{r}
+dat_count_somewhat <- final_long_df %>%
+  filter(!is.na(Absense_Score) == T | !is.na(ls1_Score) == T | !is.na(ls2_Score) == T | !is.na(ls3_Score) == T |!is.na(event_Score) == T | !is.na(present_Score) == T | !is.na(sat_Score) == T | !is.na(wb_hap_Score) == T | !is.na(wb_he_Score) == T | !is.na(wb_so_Score) == T) %>% 
+  filter(!Absense_Score == 99 | !ls1_Score == 99 | !ls2_Score == 99 | !ls3_Score == 99 | !event_Score == 99| !present_Score == 99 | !sat_Score == 99 | !wb_hap_Score == 99 | !wb_he_Score == 99 | !wb_so_Score == 99)
+
+dat_count_complete <- final_long_df %>%
+  filter(!is.na(Absense_Score) == T & !is.na(ls1_Score) == T & !is.na(ls2_Score) == T & !is.na(ls3_Score) == T &!is.na(event_Score) == T & !is.na(present_Score) == T & !is.na(sat_Score) == T & !is.na(wb_hap_Score) == T & !is.na(wb_he_Score) == T & !is.na(wb_so_Score) == T) %>% 
+   filter(!Absense_Score == 99 & !ls1_Score == 99 & !ls2_Score == 99 & !ls3_Score == 99 & !event_Score == 99 & !present_Score == 99 &  !sat_Score == 99 & !wb_hap_Score == 99 & !wb_he_Score == 99 & !wb_so_Score == 99)
+
+length(dat_count_somewhat$Absense_Score)
+length(dat_count_complete$Absense_Score)
+length(final_long_df$Absense_Score)
+```
+
+This means: *988* surveys was sent out across the entire period, *864* was at least somewhat answered to, and *818* was fully completed. 
+
+# Fix 91
+i code 91 as NA, cause NA rows will be removed later on, but this makes the merging a lot easier. 
+```{r}
+final_long_df[final_long_df == 91] <- NA
+
+### now no 91 but NAs instead 
+final_long_df %>% 
+  ggplot(aes(x = Day)) + 
+  geom_bar(position = "dodge") +
+  facet_wrap(~ Absense_Score) +
+  labs(x = "Day", 
+       y = "Frequency of Observations",
+       title= "Absense Score") +
+  scale_fill_brewer(palette = "Blues") +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5, size = 1.8) +
+  theme_bw()
+
+dat_clean <- final_long_df
+
+#write_csv(dat_clean, "/Users/laura/Desktop/work_bss/data/clean_survey_data.csv")
+```
+# svarrate count:
+nu hvis 91 er considered NA:
+```{r}
+dat_count_somewhat <- final_long_df %>%
+  filter(!is.na(Absense_Score) == T | !is.na(ls1_Score) == T | !is.na(ls2_Score) == T | !is.na(ls3_Score) == T |!is.na(event_Score) == T | !is.na(present_Score) == T | !is.na(sat_Score) == T | !is.na(wb_hap_Score) == T | !is.na(wb_he_Score) == T | !is.na(wb_so_Score) == T) %>% 
+  filter(!Absense_Score == 99 | !ls1_Score == 99 | !ls2_Score == 99 | !ls3_Score == 99 | !event_Score == 99| !present_Score == 99 | !sat_Score == 99 | !wb_hap_Score == 99 | !wb_he_Score == 99 | !wb_so_Score == 99)
+
+dat_count_complete <- final_long_df %>%
+  filter(!is.na(Absense_Score) == T & !is.na(ls1_Score) == T & !is.na(ls2_Score) == T & !is.na(ls3_Score) == T &!is.na(event_Score) == T & !is.na(present_Score) == T & !is.na(sat_Score) == T & !is.na(wb_hap_Score) == T & !is.na(wb_he_Score) == T & !is.na(wb_so_Score) == T) %>% 
+   filter(!Absense_Score == 99 & !ls1_Score == 99 & !ls2_Score == 99 & !ls3_Score == 99 & !event_Score == 99 & !present_Score == 99 &  !sat_Score == 99 & !wb_hap_Score == 99 & !wb_he_Score == 99 & !wb_so_Score == 99)
+
+length(dat_count_somewhat$Absense_Score)
+length(dat_count_complete$Absense_Score)
+length(final_long_df$Absense_Score)
+```
+
+
+
+
+get it back in to work with :D 
+```{r}
+long_dat <- read_csv("data/clean_survey_data.csv")
+```
+
+
+
+
+# BASELINE DATA 
+for employees ==> a lot of cleaning needs to be done, but not sure how as I don't know how the data was collected. 
+
+There seem to be some kind of indicator of whether or not they have completed (statoverall), but this is not in the data provided.
+
+
+```{r}
+baseline_raw <- read_excel("/Users/laura/Desktop/work_bss/Baseline_Raw data_employees/csv/baseline_employees_dataset.xlsx")
+
+# remove empty rows
+baseline_df <- baseline_raw %>% 
+  drop_na(cons, id) %>% 
+  arrange(id)
+
+# remove duplicated ids (the duplicated row is empty anyway) 
+dup_list <- which(duplicated(baseline_df$id))
+dup_list
+
+baseline_df[38:48,]
+
+
+# way to clean by index
+clean_baseline <- baseline_df %>%  
+  filter(!row_number() %in% c(2, 7,9,14,17,19, 20, 21, 25, 28,30,32,33,36,38,39, 40, 41, 42, 43, 44, 45, 47, 48, 50,52,53)) %>% 
+  filter(!id %in% c(0, 233))
+
+length(unique(clean_baseline$id)) # 33 ids now 
+which(duplicated(clean_baseline$id)) # 0 
+
+
+#can be done by only choosing those who completed *statoverall_4 == 1* meaning fully completed, but then I only have 30 ids. Gives the same vupsi. But now I now the iDs 
+
+baseline_no_dup <- baseline_df %>% 
+  filter(statoverall_4 == 1) # choosing only complete surveys
+```
+
+Hvorfor forskellige ids?
+- de kommer løbende i form af nye ansættelser eller stopper i forløbet, så nogle har kun nået baseline og er så stoppet, mens andre er kommet lidt senere og har derfor ikke gennemført baseline. 
+```{r}
+
+# SUMMARIZING IDS 
+id_clean <- clean_baseline %>% 
+  select(id) %>% 
+  group_by(id) %>% 
+  arrange()
+
+surv_ids <- as.data.frame(unique(long_dat$SurveyID)) %>% 
+  rename(SurveyID = "unique(long_dat$SurveyID)") %>% 
+  arrange(SurveyID)
+
+
+# CHECKING IF MATCH   
+id_clean$id %in% surv_ids$SurveyID
+id_clean$id[20:21] ### 209 ID does not have a survey, but a baseline 
+
+surv_ids$SurveyID %in% id_clean$id
+
+surv_ids$SurveyID[c(1,16,19,20,24,28,29,30,31)]  # indexed by the rows in FALSE above 
+```
+
+The ID's with no baseline is therefore: 
+*1 189 209 211 237 255 258 264 266* remember that 1 is the SurveyID initially called `new`. 
+
+The IDs only with baseline is: 
+*236 243*
+(236 is the transgender)
+
+
+```{r}
+# I choose the Survey data only with the IDs represented in both:
+df_small <- long_dat %>% 
+  filter(SurveyID %in% id_clean$id)
+
+length(unique(df_small$SurveyID)) # 29 IDS now 
+
+
+baseline_small <- clean_baseline %>% 
+  filter(id %in% df_small$SurveyID)
+
+length(unique(baseline_small$id))
+
+# checking its the same ids 
+unique(df_small$SurveyID %in% baseline_small$id)
+
+# renaming to make merge easier
+baseline_small <- baseline_small %>% 
+  rename(SurveyID = id)
+```
+
+
+
+## Making baseline data long format 
+```{r}
+# making list of days to get baseline on long format 
+dat <- data.frame(matrix(nrow = 26))
+dat$Day <- c(1:26)
+dat <- dat %>% 
+  select(Day)
+
+test_dat <- baseline_small %>% 
+  select(cons, SurveyID, age, gen)
+
+baseline_small_longformat <- merge(dat, baseline_small)
+
+# now they are both on long format w 26 days and 29 ids 
+dim(baseline_small_longformat)
+dim(df_small)
+```
+
+## merging baseline and survey dat 
+```{r}
+final_clean_long_merged <- inner_join(df_small, baseline_small_longformat, by = c("Day" = "Day", "SurveyID" = "SurveyID"))
+
+final_clean_long_merged <- final_clean_long_merged %>% 
+  select(!cons) #removing consensus col 
+
+#write_csv(final_clean_long_merged, "/Users/laura/Desktop/work_bss/data/all_data_merged.csv")
+```
+
+
+
+### Baseline EMOTIONS 
+```{r}
+emo_dat <- final_clean_long_merged %>% 
+  select(Day, SurveyID, Absense_Score, present_Score, s6_Score, sat_Score, gen, age, ten_1, starts_with("emo"))
+
+emo_dat$fix_s6_score <- ifelse(emo_dat$s6_Score > 50, NA, emo_dat$s6_Score)
+emo_dat$fix_abs_score <- ifelse(emo_dat$Absense_Score > 50, NA, emo_dat$Absense_Score)
+emo_dat$fix_pres_Score <- ifelse(emo_dat$present_Score > 50, NA, emo_dat$present_Score)
+emo_dat$fix_sat_Score <- ifelse(emo_dat$sat_Score > 50, NA, emo_dat$sat_Score)
+
+emo_dat_2 <- emo_dat %>% 
+  group_by(Day, SurveyID, fix_abs_score, fix_pres_Score, gen, age, ten_1, s6_Score, fix_sat_Score) %>% 
+  summarize(avr_sens = (sum(emo_1, emo_2, emo_3, emo_4, emo_5, emo_8)/6), 
+            avr_insens = (sum(emo_6, emo_7, emo_9, emo_10)/4))
+
+
+write_csv(emo_dat, "/Users/laura/Desktop/work_bss/data/emo_dat_all.csv")
+write_csv(emo_dat_2, "/Users/laura/Desktop/work_bss/data/emo_average_dat.csv")
+```
+Okay so I have summarized all the emotions variable into two: the sensitive one (1,2,3,4,5,8) and the insensitive one (6,7,9,10). So if you report high on average in the sensitive one, it is because you are agreeing with statements that indicates you are sensitive and vice versa. 
+
+
+
+
+
+# Model Data 
+For now only making of the sat, abs, presenteeism and leadership variables. Does not make sense to make with the sickness yet, as only two observations. 
+```{r}
+data <- final_clean_long_merged
+```
+
+## Absenteeism 
+#### abseenteism and satisfaction  
+```{r}
+filter_dat <- data %>% 
+  select(Day, SurveyID, Absense_Score, sat_Score, age, gen, ten_1)
+
+# filtering away all 98,99 etc. 
+filter_dat$fix_sat_score <- ifelse(filter_dat$sat_Score > 10, NA, filter_dat$sat_Score)
+filter_dat$fix_abs_score <- ifelse(filter_dat$Absense_Score > 10, NA, filter_dat$Absense_Score)
+
+# removing day if both sat and abs are NA
+filter_no_na <- filter_dat %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | !(is.na(fix_sat_score) == TRUE)) %>% 
+  select(Day, SurveyID, fix_sat_score, fix_abs_score, age, gen, ten_1)
+
+# checking the data 
+filter_no_na %>% 
+  group_by(SurveyID) %>% 
+  summarise(n())
+
+# removing IDs observed less than 5 times:
+model_dat_sat_abs <- filter_no_na %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+# trying model of this data 
+#mod_test <- lmer(fix_abs_score ~ fix_sat_score + age + ten_1 + gen +(1|Day) + (1|SurveyID), model_dat_sat_abs)
+#mod_test2 <- lmer(fix_abs_score ~ fix_sat_score + age + ten_1 + gen + (1|Day) + (1|SurveyID), model_dat_sat_abs)
+
+# writing out csv 
+#write_csv(model_dat_sat_abs, "/Users/laura/Desktop/work_bss/data/sat_abs_data.csv")
+
+
+```
+
+
+#### abseenteism, presenteeism and leadership variables 
+
+```{r}
+leader_dat <- data %>% 
+  select(Day, SurveyID, Absense_Score, sat_Score, present_Score, ls1_Score, ls2_Score, ls3_Score, s6_Score, age, gen, ten_1)
+
+# replacing all 98,99 etc. with NA 
+leader_dat$fix_abs_score <- ifelse(leader_dat$Absense_Score > 10, NA, leader_dat$Absense_Score)
+leader_dat$fix_ls1_score <- ifelse(leader_dat$ls1_Score > 10, NA, leader_dat$ls1_Score)
+leader_dat$fix_ls2_score <- ifelse(leader_dat$ls2_Score > 10, NA, leader_dat$ls2_Score)
+leader_dat$fix_ls3_score <- ifelse(leader_dat$ls3_Score > 10, NA, leader_dat$ls3_Score)
+leader_dat$fix_pres_score <- ifelse(leader_dat$present_Score > 10, NA, leader_dat$present_Score)
+leader_dat$fix_sat_score <- ifelse(leader_dat$sat_Score > 10, NA, leader_dat$sat_Score)
+
+
+####################### DEALING W NA'S IN LEADER VARIBALES   ####################### 
+## REMOVING SUBJECTS w no answers in leadership variables 
+
+# Get unique IDs
+unique_ids <- unique(leader_dat$SurveyID)
+
+# Create a vector to store IDs to be removed
+ids_to_remove <- c()
+
+# Loop through unique IDs
+for (id in unique_ids) {
+  # Subset the data frame for the current ID
+  id_rows <- leader_dat[leader_dat$SurveyID == id, ]
+  
+  # Check if all specified columns are NA for the current ID
+  if (all(is.na(id_rows$fix_ls1_score)) && all(is.na(id_rows$fix_ls3_score)) && all(is.na(id_rows$fix_ls3_score))) {
+    # Add the ID to the vector of IDs to be removed
+    ids_to_remove <- c(ids_to_remove, id)
+  }
+}
+
+ids_to_remove
+
+# Remove rows corresponding to IDs in the vector
+leader_dat <- leader_dat[!leader_dat$SurveyID %in% ids_to_remove, ]
+
+lead_df_s6 <- leader_dat
+
+
+##### removing THE DAYS if all are NA
+leader_dat_no_na <- leader_dat %>% 
+  filter(!(is.na(fix_abs_score) == TRUE) | (!(is.na(fix_pres_score) == TRUE) | !(is.na(fix_sat_score) == TRUE) | !(is.na(fix_ls1_score) == TRUE | !(is.na(fix_ls2_score) == TRUE | !(is.na(fix_ls2_score) == TRUE))))) 
+
+
+leader_dat_no_na <- leader_dat_no_na %>% 
+  select(!Absense_Score, !ls1_Score, !ls2_Score, !ls3_Score, !present_Score, !sat_Score) %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+# checking the data 
+leader_dat_no_na %>% 
+  group_by(s6_Score) %>% 
+  summarise(n())
+
+length(unique(leader_dat_no_na$SurveyID))
+
+
+#write_csv(lead_df_s6, "/Users/laura/Desktop/work_bss/data/ls_s6_data.csv")
+```
+
+
+
+## Presenteeism
+#### presenteeism and satisfaction 
+```{r}
+filter_dat_pres <- data %>% 
+  select(Day, SurveyID, present_Score, sat_Score, age, gen, ten_1)
+
+# filtering away all 98,99 etc. 
+filter_dat_pres$fix_sat_score <- ifelse(filter_dat_pres$sat_Score > 10, NA, filter_dat_pres$sat_Score)
+filter_dat_pres$fix_pres_score <- ifelse(filter_dat_pres$present_Score > 10, NA, filter_dat_pres$present_Score)
+
+# removing day if both sat and abs are NA
+filter_no_na_pres <- filter_dat_pres %>% 
+  filter(!(is.na(fix_pres_score) == TRUE) | !(is.na(fix_sat_score) == TRUE)) %>% 
+  select(Day, SurveyID, fix_sat_score, fix_pres_score, age, gen, ten_1)
+
+# checking the data 
+filter_no_na_pres %>% 
+  group_by(SurveyID) %>% 
+  summarise(n())
+
+# removing IDs observed less than 5 times:
+model_dat_sat_pres <- filter_no_na_pres %>% 
+  filter(SurveyID != 147 & SurveyID != 232)
+
+# trying model of this data 
+#mod_test <- lmer(fix_abs_score ~ fix_sat_score + age + ten_1 + gen +(1|Day) + (1|SurveyID), model_dat_sat_abs)
+#mod_test2 <- lmer(fix_abs_score ~ fix_sat_score + age + ten_1 + gen + (1|Day) + (1|SurveyID), model_dat_sat_abs)
+
+# writing out csv 
+#write_csv(model_dat_sat_pres, "/Users/laura/Desktop/work_bss/data/sat_pres_data.csv")
+
+```
+
+
+
+
+# LEADER DATA
+
+```{r}
+lead_dat <- read_excel("/Users/laura/Desktop/work_bss/Masterfile_2_Leader.xlsx")
+
+colnames(lead_dat)
+
+colnames(raw_data)
+
+lead_dat$abs_6
+```
+
+```{r}
+# wb hap == level of happiness at work (1-7)
+wb_hap_lead <- lead_dat %>% 
+  select(starts_with("wb_hap"), "SurveyID")
+
+# wb so == level of social engagement (1-7)
+wb_so_lead <- lead_dat %>% 
+  select(starts_with("wb_so"), "SurveyID")
+
+# wb so == level of helbred (1-7)
+wb_he_lead <- lead_dat %>% 
+  select(starts_with("wb_he"), "SurveyID")
+
+# wb so == PRESENTEISM (Har du arbejdet i dag, selv om du ikke følte dig frisk nok til at arbejde?)
+# NEJ = 1, Ja = antal i S6
+presenteism_lead <- lead_dat %>% 
+  select(starts_with("pre"), "SurveyID") 
+
+S6_pres_lead <- lead_dat %>% 
+  select(starts_with("s_6"), "SurveyID")
+
+
+###### ABSENTEISM ###### 
+###### her har vi 5 forskellige absense for some reason 
+abs1 <- lead_dat %>% 
+  select(starts_with("abs_1"), "SurveyID")
+
+abs2 <- lead_dat %>% 
+  select(starts_with("abs_2"), "SurveyID")
+
+abs3 <- lead_dat %>% 
+  select(starts_with("abs_3"), "SurveyID")
+
+abs4 <- lead_dat %>% 
+  select(starts_with("abs_4"), "SurveyID")
+
+abs5 <- lead_dat %>% 
+  select(starts_with("abs_5"), "SurveyID")
+
+
+###### ES
+
+es1 <- lead_dat %>% 
+  select(starts_with("es_1"), "SurveyID")
+
+es2 <- lead_dat %>% 
+  select(starts_with("es_2"), "SurveyID")
+
+es3 <- lead_dat %>% 
+  select(starts_with("es_3"), "SurveyID")
+
+```
+
+
+```{r}
+###### MAKING ALL LONG FORMAT: ##### 
+# absense:
+abs_long1 <- abs1 %>%
+  pivot_longer(!SurveyID, names_to = "abs1_var", values_to = "abs1_score")
+
+abs_long2 <- abs2 %>%
+  pivot_longer(!SurveyID, names_to = "abs2_var", values_to = "abs2_score")
+
+abs_long3 <- abs3 %>%
+  pivot_longer(!SurveyID, names_to = "abs3_var", values_to = "abs3_score")
+
+abs_long4 <- abs4 %>%
+  pivot_longer(!SurveyID, names_to = "abs4_var", values_to = "abs4_score")
+
+abs_long5 <- abs5 %>%
+  pivot_longer(!SurveyID, names_to = "abs5_var", values_to = "abs5_score")
+
+
+# presenteiism and how much
+presenteism_long_lead <- presenteism_lead %>%
+  pivot_longer(!SurveyID, names_to = "present_var", values_to = "present_Score")
+
+s6_long_lead <- S6_pres_lead %>%
+  pivot_longer(!SurveyID, names_to = "s6_var", values_to = "s6_Score")
+
+
+# well being
+wb_hap_long_lead <- wb_hap_lead %>%
+  pivot_longer(!SurveyID, names_to = "wb_hap_var", values_to = "wb_hap_Score")
+
+wb_he_long_lead <- wb_he_lead %>%
+  pivot_longer(!SurveyID, names_to = "wb_he_var", values_to = "wb_he_Score")
+
+wb_so_long_lead <- wb_so_lead %>%
+  pivot_longer(!SurveyID, names_to = "wb_so_var", values_to = "wb_so_Score")
+
+
+# es 
+es1_long <- es1 %>%
+  pivot_longer(!SurveyID, names_to = "es1_var", values_to = "es_1_Score")
+
+es2_long <- es2 %>%
+  pivot_longer(!SurveyID, names_to = "es2_var", values_to = "es_2_Score")
+
+es3_long <- es3 %>%
+  pivot_longer(!SurveyID, names_to = "es3_var", values_to = "es_3_Score")
+```
+
+
+#### fixing the time column on all:
+```{r}
+### TIME ON ABS
+abs_long1 <- add_time_column(abs_long1, "abs_1_d", abs_long1$abs1_var)
+abs_long2 <- add_time_column(abs_long2, "abs_2_d", abs_long2$abs2_var)
+abs_long3 <- add_time_column(abs_long3, "abs_3_d", abs_long3$abs3_var)
+abs_long4 <- add_time_column(abs_long4, "abs_4_d", abs_long4$abs4_var)
+abs_long5 <- add_time_column(abs_long5, "abs_5_d", abs_long5$abs5_var)
+
+### TIME ON WELLBEING 
+wb_hap_long_lead <- add_time_column(wb_hap_long_lead, "wb_hap_d", wb_hap_long_lead$wb_hap_var)
+wb_he_long_lead <- add_time_column(wb_he_long_lead, "wb_he_d", wb_he_long_lead$wb_he_var)
+wb_so_long_lead <- add_time_column(wb_so_long_lead, "wb_so_d", wb_so_long_lead$wb_so_var)
+
+### TIME ON WELLBEING 
+es1_long <- add_time_column(es1_long, "es_1_d", es1_long$es1_var)
+es2_long <- add_time_column(es2_long, "es_2_d", es2_long$es2_var)
+es3_long <- add_time_column(es3_long, "es_3_d", es3_long$es3_var)
+
+#### pres and s6
+presenteism_long_lead <- add_time_column(presenteism_long_lead, "pre_d", presenteism_long_lead$present_var)
+s6_long_lead <- add_time_column(s6_long_lead, "s_6_d", s6_long_lead$s6_var)
+```
+
+#### merging long dfs:
+```{r}
+# perform an inner join on the "time" and "ID" variables
+merged1 <- inner_join(abs_long1, abs_long2, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged2 <- inner_join(merged1, abs_long3, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged3 <- inner_join(merged2, abs_long4, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged4 <- inner_join(merged3, abs_long5, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged5 <- inner_join(merged4, wb_hap_long_lead, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged6 <- inner_join(merged5, wb_he_long_lead, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged7 <- inner_join(merged6, wb_so_long_lead, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged8 <- inner_join(merged7, es1_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged9 <- inner_join(merged8, es2_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged10 <- inner_join(merged9, es3_long, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged11 <- inner_join(merged10, presenteism_long_lead, by = c("time" = "time", "SurveyID" = "SurveyID"))
+merged12 <- inner_join(merged11, s6_long_lead, by = c("time" = "time", "SurveyID" = "SurveyID"))
+
+# view the merged data frame
+leader_long_df <- merged12 %>%
+  select(!ends_with("var")) %>% 
+  rename(Day = time) %>% 
+  select(Day, SurveyID, everything()) 
+
+leader_long_df <- leader_long_df %>% 
+  select(!c(abs1_score, abs2_score, abs3_score, abs4_score))
+
+#write_csv(leader_long_df, "/Users/laura/Desktop/work_bss/data/leader_survey_data.csv")
+```
+
+Okay ift absententiism og lederen her: 
+- alle fem abs variabler er dummy coded som ja nej ift et stillet spørgsmål. Da lederen kun har svaret 1 i abs_5 og 0 i alle andre kan vi altså bare her beholde abs_5, og sige at det er på en 1-5 skala hvor 1 er slet ikke, 5 er hele tiden. 
+
+
+##### combining leader data w all data 
+```{r}
+# fixing the names in leader variable
+colnames(leader_long_df) <- paste("lead", colnames(leader_long_df), sep = "_")
+
+leader_long_df <- leader_long_df %>% 
+  rename(Day = lead_Day, 
+         SurveyID = lead_SurveyID)
+
+# merging both
+lead_employee_all_data <- merge(final_clean_long_merged, leader_long_df, by = c("Day" = "Day", "SurveyID" = "SurveyID"), all = TRUE)
+
+df_huge <- lead_employee_all_data %>% 
+  select(Day, SurveyID, Absense_Score, present_Score, age, gen, ten_1, sat_Score, s6_Score, wb_hap_Score, wb_he_Score, wb_so_Score, ls1_Score,ls2_Score,ls3_Score, lead_wb_hap_Score, lead_wb_he_Score, lead_wb_so_Score, lead_es_1_Score, lead_es_2_Score, lead_es_3_Score, lead_present_Score, lead_present_Score, lead_abs5_score)
+
+####### LOOPING TO FIX COLUMNS ####### 
+# List of column names to process
+columns_to_process <- c("sat_Score", "wb_hap_Score", "wb_he_Score", "wb_so_Score", "ls1_Score","ls2_Score","ls3_Score", "lead_wb_hap_Score", "lead_wb_he_Score", "lead_wb_so_Score", "lead_es_1_Score", "lead_es_2_Score", "lead_es_3_Score", "lead_present_Score", "lead_present_Score", "lead_abs5_score")
+
+# Loop through each column and apply the condition
+for (col in columns_to_process) {
+  df_huge[[paste0("fix_", col)]] <- ifelse(df_huge[[col]] > 10, NA, df_huge[[col]])
+}
+
+```
+
+```{r}
+test_mod <- lmer(fix_wb_he_Score ~ lead_wb_he_Score +age + gen + ten_1 + Day +  (Day + 1 | SurveyID), data = df_huge)
+```
+
+
+
+
+
+
+
+
+
+
